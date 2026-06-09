@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id          String   @id @default(cuid())
+  shop        String   @unique
+  name        String?
+  email       String?
+  plan        String?
+  currency    String?
+  timezone    String?
+  country     String?
+  settings    Json?
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model NotificationConfig {
+  id             String   @id @default(cuid())
+  shop           String   @unique
+  emailProvider  String   @default("default")
+  smtpHost       String?
+  smtpPort       Int?
+  smtpUser       String?
+  smtpPass       String?
+  smtpFromName   String?
+  smtpFromEmail  String?
+  smtpEncryption String?  @default("tls")
+  templates      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Apartment {
+  id            String   @id @default(cuid())
+  shop          String
+  productId     String
+  productTitle  String
+  name          String
+  description   String?
+  pricePerNight Float?
+  bedrooms      Int?
+  bathrooms     Int?
+  maxGuests     Int?
+  amenities     String[]
+  address       String?
+  city          String?
+  country       String?
+  checkInTime   String?
+  checkOutTime  String?
+  minNights     Int?     @default(1)
+  maxNights     Int?
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop])
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
