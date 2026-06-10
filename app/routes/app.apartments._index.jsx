@@ -16,13 +16,30 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
   const id = formData.get("id");
 
   if (intent === "delete") {
+    const apartment = await prisma.apartment.findUnique({ where: { id } });
     await prisma.apartment.delete({ where: { id } });
+    if (apartment?.productId) {
+      await admin.graphql(
+        `#graphql
+        mutation productUpdate($input: ProductInput!) {
+          productUpdate(input: $input) { product { id } }
+        }`,
+        {
+          variables: {
+            input: {
+              id: apartment.productId.startsWith('gid://') ? apartment.productId : `gid://shopify/Product/${apartment.productId}`,
+              metafields: [{ namespace: "rentfic", key: "is_apartment", value: "false", type: "single_line_text_field" }],
+            },
+          },
+        }
+      );
+    }
   }
   return { success: true };
 };

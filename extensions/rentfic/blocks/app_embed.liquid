@@ -8,6 +8,21 @@
   style="display:none;">
 </div>
 
+{% if request.page_type == 'product' and product.metafields.rentfic.is_apartment == 'true' %}
+<style>
+  .product-form__buttons,
+  .product-form__quantity,
+  .quantity,
+  .product__quantity,
+  [class*="quantity-wrapper"],
+  .product-form__submit,
+  button[name="add"],
+  [data-type="add-to-cart-button"],
+  .shopify-payment-button,
+  .product-form__payment-button { display: none !important; }
+</style>
+{% endif %}
+
 {{ 'rentfic-booking.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'rentfic-booking.js' | asset_url }}" defer></script>
 
@@ -32,7 +47,7 @@
       "type": "text",
       "id": "button_text",
       "label": "Book button text",
-      "default": "Reserve Now"
+      "default": "Book Now"
     }
   ]
 }

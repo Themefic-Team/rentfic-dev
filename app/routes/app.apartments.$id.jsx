@@ -49,8 +49,25 @@ export const loader = async ({ request, params }) => {
 
 // ─── Action ──────────────────────────────────────────────────────────────────
 
+async function setRentficMetafield(admin, productId, value) {
+  await admin.graphql(
+    `#graphql
+    mutation productUpdate($input: ProductInput!) {
+      productUpdate(input: $input) { product { id } }
+    }`,
+    {
+      variables: {
+        input: {
+          id: productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`,
+          metafields: [{ namespace: "rentfic", key: "is_apartment", value, type: "single_line_text_field" }],
+        },
+      },
+    }
+  );
+}
+
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const fd = await request.formData();
 
   // Top-level queryable columns
@@ -104,6 +121,7 @@ export const action = async ({ request, params }) => {
 
   if (params.id === "new") {
     const created = await prisma.apartment.create({ data: { ...core, settings } });
+    await setRentficMetafield(admin, core.productId, "true");
     return redirect(`/app/apartments/${created.id}?saved=1`);
   }
   const { shop, ...updateCore } = core;
@@ -111,6 +129,7 @@ export const action = async ({ request, params }) => {
     where: { id: params.id },
     data: { ...updateCore, settings },
   });
+  await setRentficMetafield(admin, core.productId, "true");
   return { success: true };
 };
 

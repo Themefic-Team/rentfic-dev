@@ -37,24 +37,41 @@
     container.dataset.buttonText  = embed.dataset.buttonText  || 'Reserve Now';
     container.innerHTML = '<div class="rentfic-loading">Checking availability…</div>';
 
-    // Insert after the product description — try common theme selectors
+    // Insert before the product form (after description, where the hidden buttons were)
     var inserted = false;
-    var descSelectors = [
-      '.product__description',
-      '.product-description',
-      '[class*="product-description"]',
-      '.product__info .rte',
-      '.product-single__description',
-      '.product__details .rte',
-      '[data-product-description]',
+    var beforeFormSelectors = [
+      '.product-form',
+      '.product__form',
+      'form[action*="/cart/add"]',
     ];
 
-    for (var i = 0; i < descSelectors.length; i++) {
-      var desc = document.querySelector(descSelectors[i]);
-      if (desc) {
-        desc.parentNode.insertBefore(container, desc.nextSibling);
+    for (var i = 0; i < beforeFormSelectors.length; i++) {
+      var form = document.querySelector(beforeFormSelectors[i]);
+      if (form) {
+        form.parentNode.insertBefore(container, form);
         inserted = true;
         break;
+      }
+    }
+
+    // Try inserting after description
+    if (!inserted) {
+      var descSelectors = [
+        '.product__description',
+        '.product-description',
+        '[class*="product-description"]',
+        '.product__info .rte',
+        '.product-single__description',
+        '.product__details .rte',
+        '[data-product-description]',
+      ];
+      for (var j = 0; j < descSelectors.length; j++) {
+        var desc = document.querySelector(descSelectors[j]);
+        if (desc) {
+          desc.parentNode.insertBefore(container, desc.nextSibling);
+          inserted = true;
+          break;
+        }
       }
     }
 
@@ -67,8 +84,8 @@
         'main .product',
         'main',
       ];
-      for (var j = 0; j < fallbackSelectors.length; j++) {
-        var wrap = document.querySelector(fallbackSelectors[j]);
+      for (var k = 0; k < fallbackSelectors.length; k++) {
+        var wrap = document.querySelector(fallbackSelectors[k]);
         if (wrap) { wrap.appendChild(container); inserted = true; break; }
       }
     }
@@ -117,7 +134,6 @@
         this.apartment    = data.apartment;
         this.shopSettings = data.shopSettings || {};
 
-        this._hideNativeButtons();
         this._setInitialViewMonth();
         this._render();
       } catch (_) {
@@ -126,23 +142,6 @@
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────
-
-    _hideNativeButtons() {
-      const style = document.createElement('style');
-      style.textContent = `
-        .product-form__quantity,
-        .quantity,
-        .product__quantity,
-        [class*="quantity-wrapper"],
-        .product-form__submit,
-        button[name="add"],
-        [data-type="add-to-cart-button"],
-        .shopify-payment-button,
-        .product-form__payment-button,
-        .product-form__buttons { display: none !important; }
-      `;
-      document.head.appendChild(style);
-    }
 
     _setInitialViewMonth() {
       const today = new Date(); today.setHours(0,0,0,0);
@@ -298,7 +297,7 @@
       else if (bookingType === 'single' && !this.startDate) hint = 'Select a date';
       else if (bookingType === 'multiple')                  hint = 'Select one or more dates';
 
-      const showCalAlways = displayCal === 'always_open';
+      const showCalAlways = true;
 
       this.container.innerHTML = `
         <div class="rentfic-widget" style="--rf-primary:${this.primaryColor}">
@@ -492,12 +491,8 @@
           return;
         }
 
-        // 3. Redirect per shop setting
-        const r = (this.shopSettings.redirectAfterCart || 'automatic');
-        if      (r === 'redirect_to_cart')     window.location.href = '/cart';
-        else if (r === 'redirect_to_checkout') window.location.href = '/checkout';
-        else if (r === 'disabled')             this._msg('Booking confirmed! Item added to cart.', 'success');
-        else                                   window.location.href = '/cart';
+        // 3. Always redirect to checkout
+        window.location.href = '/checkout';
 
       } catch (_) {
         this._msg('An error occurred. Please try again.', 'error');
