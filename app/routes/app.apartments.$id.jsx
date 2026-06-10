@@ -11,28 +11,35 @@ import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
 const AMENITIES = [
-  "WiFi",
-  "Air Conditioning",
-  "Heating",
-  "Kitchen",
-  "Washing Machine",
-  "TV",
-  "Free Parking",
-  "Pool",
-  "Gym",
-  "Elevator",
-  "Balcony",
-  "Sea View",
-  "Pet Friendly",
-  "Smoking Allowed",
+  "WiFi", "Air Conditioning", "Heating", "Kitchen",
+  "Washing Machine", "TV", "Free Parking", "Pool",
+  "Gym", "Elevator", "Balcony", "Sea View", "Pet Friendly", "Smoking Allowed",
 ];
+
+const DAYS = [
+  { key: "mon", label: "Monday" },
+  { key: "tue", label: "Tuesday" },
+  { key: "wed", label: "Wednesday" },
+  { key: "thu", label: "Thursday" },
+  { key: "fri", label: "Friday" },
+  { key: "sat", label: "Saturday" },
+  { key: "sun", label: "Sunday" },
+];
+
+const DEFAULT_WEEKLY = Object.fromEntries(
+  DAYS.map(({ key }) => [key, { enabled: true, open: "00:00", close: "23:59" }])
+);
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
-  if (params.id === "new") {
-    return { apartment: null };
-  }
+  if (params.id === "new") return { apartment: null };
   const apartment = await prisma.apartment.findFirst({
     where: { id: params.id, shop: session.shop },
   });
@@ -40,45 +47,130 @@ export const loader = async ({ request, params }) => {
   return { apartment };
 };
 
+// ─── Action ──────────────────────────────────────────────────────────────────
+
 export const action = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
-  const formData = await request.formData();
+  const fd = await request.formData();
 
-  const data = {
+  // Top-level queryable columns
+  const pricePerNight = fd.get("pricePerNight") ? parseFloat(fd.get("pricePerNight")) : null;
+  const core = {
     shop: session.shop,
-    productId: formData.get("productId"),
-    productTitle: formData.get("productTitle"),
-    name: formData.get("name") || "",
-    description: formData.get("description") || null,
-    pricePerNight: formData.get("pricePerNight")
-      ? parseFloat(formData.get("pricePerNight"))
-      : null,
-    bedrooms: formData.get("bedrooms") ? parseInt(formData.get("bedrooms")) : null,
-    bathrooms: formData.get("bathrooms") ? parseInt(formData.get("bathrooms")) : null,
-    maxGuests: formData.get("maxGuests") ? parseInt(formData.get("maxGuests")) : null,
-    amenities: formData.getAll("amenities"),
-    address: formData.get("address") || null,
-    city: formData.get("city") || null,
-    country: formData.get("country") || null,
-    checkInTime: formData.get("checkInTime") || null,
-    checkOutTime: formData.get("checkOutTime") || null,
-    minNights: formData.get("minNights") ? parseInt(formData.get("minNights")) : 1,
-    maxNights: formData.get("maxNights") ? parseInt(formData.get("maxNights")) : null,
-    status: formData.get("status") || "active",
+    productId: fd.get("productId"),
+    productTitle: fd.get("productTitle"),
+    name: fd.get("name") || "",
+    status: fd.get("status") || "active",
+    pricePerNight,
+  };
+
+  // Everything else goes into the settings JSON blob
+  const settings = {
+    description: fd.get("description") || null,
+    bookingType: fd.get("bookingType") || "single",
+    // availability
+    calendarStartDate: fd.get("calendarStartDate") || null,
+    calendarEndDate: fd.get("calendarEndDate") || null,
+    checkInTime: fd.get("checkInTime") || null,
+    checkOutTime: fd.get("checkOutTime") || null,
+    minNights: fd.get("minNights") ? parseInt(fd.get("minNights")) : 1,
+    maxNights: fd.get("maxNights") ? parseInt(fd.get("maxNights")) : null,
+    quantityEnabled: fd.get("quantityEnabled") === "true",
+    weeklyAvailability: JSON.parse(fd.get("weeklyAvailability") || "null"),
+    // block dates
+    blockedDates: JSON.parse(fd.get("blockedDates") || "[]"),
+    // stock / capacity
+    bedrooms: fd.get("bedrooms") ? parseInt(fd.get("bedrooms")) : null,
+    bathrooms: fd.get("bathrooms") ? parseInt(fd.get("bathrooms")) : null,
+    maxGuests: fd.get("maxGuests") ? parseInt(fd.get("maxGuests")) : null,
+    stockQuantity: fd.get("stockQuantity") ? parseInt(fd.get("stockQuantity")) : null,
+    // location
+    address: fd.get("address") || null,
+    city: fd.get("city") || null,
+    country: fd.get("country") || null,
+    // amenities
+    amenities: fd.getAll("amenities"),
+    // discounts
+    discountedDates: JSON.parse(fd.get("discountedDates") || "[]"),
+    conditionalDiscounts: JSON.parse(fd.get("conditionalDiscounts") || "[]"),
+    // payment
+    payNowEnabled: fd.get("payNowEnabled") === "true",
+    payNowPercent: fd.get("payNowPercent") ? parseFloat(fd.get("payNowPercent")) : null,
+    // deposit
+    depositEnabled: fd.get("depositEnabled") === "true",
+    depositType: fd.get("depositType") || "percent",
+    depositAmount: fd.get("depositAmount") ? parseFloat(fd.get("depositAmount")) : null,
   };
 
   if (params.id === "new") {
-    const created = await prisma.apartment.create({ data });
+    const created = await prisma.apartment.create({ data: { ...core, settings } });
     return redirect(`/app/apartments/${created.id}?saved=1`);
-  } else {
-    const { shop, ...updateData } = data;
-    await prisma.apartment.update({
-      where: { id: params.id },
-      data: updateData,
-    });
-    return { success: true };
   }
+  const { shop, ...updateCore } = core;
+  await prisma.apartment.update({
+    where: { id: params.id },
+    data: { ...updateCore, settings },
+  });
+  return { success: true };
 };
+
+// ─── UI Primitives ───────────────────────────────────────────────────────────
+
+function Toggle({ enabled, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      onClick={() => onChange(!enabled)}
+      style={{
+        width: 44, height: 24, borderRadius: 12, border: "none", padding: 0,
+        background: enabled ? "#008060" : "#c9cccf",
+        position: "relative", cursor: "pointer", flexShrink: 0,
+        transition: "background 0.2s",
+      }}
+    >
+      <span style={{
+        position: "absolute", top: 3,
+        left: enabled ? 22 : 3,
+        width: 18, height: 18, borderRadius: "50%",
+        background: "#fff", transition: "left 0.2s",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+      }} />
+    </button>
+  );
+}
+
+function Field({ label, hint, children, style: s }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, ...s }}>
+      <label style={{ fontSize: 14, fontWeight: 500, color: "#202223" }}>{label}</label>
+      {hint && <span style={{ fontSize: 12, color: "#6d7175", marginTop: -2 }}>{hint}</span>}
+      {children}
+    </div>
+  );
+}
+
+const Inp = ({ style: s, ...props }) => (
+  <input style={{ ...inputStyle, ...s }} {...props} />
+);
+const Sel = ({ style: s, children, ...props }) => (
+  <select style={{ ...inputStyle, ...s }} {...props}>{children}</select>
+);
+
+function ToggleRow({ label, hint, enabled, onChange }) {
+  return (
+    <div style={toggleRowStyle}>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 500, color: "#202223" }}>{label}</div>
+        {hint && <div style={{ fontSize: 12, color: "#6d7175", marginTop: 2 }}>{hint}</div>}
+      </div>
+      <Toggle enabled={enabled} onChange={onChange} />
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function ApartmentEditPage() {
   const { apartment } = useLoaderData();
@@ -94,103 +186,116 @@ export default function ApartmentEditPage() {
   const productId = apartment?.productId ?? searchParams.get("productId") ?? "";
   const productTitle = apartment?.productTitle ?? searchParams.get("productTitle") ?? "";
 
-  // Original values for discard
-  const orig = useRef({
-    name: apartment?.name ?? productTitle,
-    description: apartment?.description ?? "",
-    pricePerNight: apartment?.pricePerNight?.toString() ?? "",
-    bedrooms: apartment?.bedrooms?.toString() ?? "",
-    bathrooms: apartment?.bathrooms?.toString() ?? "",
-    maxGuests: apartment?.maxGuests?.toString() ?? "",
-    amenities: apartment?.amenities ?? [],
-    address: apartment?.address ?? "",
-    city: apartment?.city ?? "",
-    country: apartment?.country ?? "",
-    checkInTime: apartment?.checkInTime ?? "14:00",
-    checkOutTime: apartment?.checkOutTime ?? "11:00",
-    minNights: apartment?.minNights?.toString() ?? "1",
-    maxNights: apartment?.maxNights?.toString() ?? "",
-    status: apartment?.status ?? "active",
-  });
+  // Flatten settings blob + top-level columns into one initial values ref
+  const orig = useRef(null);
+  if (!orig.current) {
+    const s = apartment?.settings ?? {};
+    orig.current = {
+      // top-level columns
+      name: apartment?.name ?? productTitle,
+      status: apartment?.status ?? "active",
+      pricePerNight: apartment?.pricePerNight?.toString() ?? "",
+      // settings blob
+      description: s.description ?? "",
+      bookingType: s.bookingType ?? "single",
+      calendarStartDate: s.calendarStartDate ?? "",
+      calendarEndDate: s.calendarEndDate ?? "",
+      checkInTime: s.checkInTime ?? "14:00",
+      checkOutTime: s.checkOutTime ?? "11:00",
+      minNights: s.minNights?.toString() ?? "1",
+      maxNights: s.maxNights?.toString() ?? "",
+      quantityEnabled: s.quantityEnabled ?? false,
+      weeklyAvailability: s.weeklyAvailability ?? DEFAULT_WEEKLY,
+      blockedDates: s.blockedDates ?? [],
+      bedrooms: s.bedrooms?.toString() ?? "",
+      bathrooms: s.bathrooms?.toString() ?? "",
+      maxGuests: s.maxGuests?.toString() ?? "",
+      stockQuantity: s.stockQuantity?.toString() ?? "",
+      address: s.address ?? "",
+      city: s.city ?? "",
+      country: s.country ?? "",
+      amenities: s.amenities ?? [],
+      discountedDates: s.discountedDates ?? [],
+      conditionalDiscounts: s.conditionalDiscounts ?? [],
+      payNowEnabled: s.payNowEnabled ?? false,
+      payNowPercent: s.payNowPercent?.toString() ?? "100",
+      depositEnabled: s.depositEnabled ?? false,
+      depositType: s.depositType ?? "percent",
+      depositAmount: s.depositAmount?.toString() ?? "",
+    };
+  }
 
-  const [name, setName] = useState(orig.current.name);
-  const [description, setDescription] = useState(orig.current.description);
-  const [pricePerNight, setPricePerNight] = useState(orig.current.pricePerNight);
-  const [bedrooms, setBedrooms] = useState(orig.current.bedrooms);
-  const [bathrooms, setBathrooms] = useState(orig.current.bathrooms);
-  const [maxGuests, setMaxGuests] = useState(orig.current.maxGuests);
-  const [amenities, setAmenities] = useState(orig.current.amenities);
-  const [address, setAddress] = useState(orig.current.address);
-  const [city, setCity] = useState(orig.current.city);
-  const [country, setCountry] = useState(orig.current.country);
-  const [checkInTime, setCheckInTime] = useState(orig.current.checkInTime);
-  const [checkOutTime, setCheckOutTime] = useState(orig.current.checkOutTime);
-  const [minNights, setMinNights] = useState(orig.current.minNights);
-  const [maxNights, setMaxNights] = useState(orig.current.maxNights);
-  const [status, setStatus] = useState(orig.current.status);
+  const o = orig.current;
+  const [name, setName] = useState(o.name);
+  const [status, setStatus] = useState(o.status);
+  const [pricePerNight, setPricePerNight] = useState(o.pricePerNight);
+  const [description, setDescription] = useState(o.description);
+  const [bookingType, setBookingType] = useState(o.bookingType);
+  const [calendarStartDate, setCalendarStartDate] = useState(o.calendarStartDate);
+  const [calendarEndDate, setCalendarEndDate] = useState(o.calendarEndDate);
+  const [checkInTime, setCheckInTime] = useState(o.checkInTime);
+  const [checkOutTime, setCheckOutTime] = useState(o.checkOutTime);
+  const [minNights, setMinNights] = useState(o.minNights);
+  const [maxNights, setMaxNights] = useState(o.maxNights);
+  const [quantityEnabled, setQuantityEnabled] = useState(o.quantityEnabled);
+  const [weeklyAvailability, setWeeklyAvailability] = useState(o.weeklyAvailability);
+  const [blockedDates, setBlockedDates] = useState(o.blockedDates);
+  const [bedrooms, setBedrooms] = useState(o.bedrooms);
+  const [bathrooms, setBathrooms] = useState(o.bathrooms);
+  const [maxGuests, setMaxGuests] = useState(o.maxGuests);
+  const [stockQuantity, setStockQuantity] = useState(o.stockQuantity);
+  const [address, setAddress] = useState(o.address);
+  const [city, setCity] = useState(o.city);
+  const [country, setCountry] = useState(o.country);
+  const [amenities, setAmenities] = useState(o.amenities);
+  const [discountedDates, setDiscountedDates] = useState(o.discountedDates);
+  const [conditionalDiscounts, setConditionalDiscounts] = useState(o.conditionalDiscounts);
+  const [payNowEnabled, setPayNowEnabled] = useState(o.payNowEnabled);
+  const [payNowPercent, setPayNowPercent] = useState(o.payNowPercent);
+  const [depositEnabled, setDepositEnabled] = useState(o.depositEnabled);
+  const [depositType, setDepositType] = useState(o.depositType);
+  const [depositAmount, setDepositAmount] = useState(o.depositAmount);
   const [isDirty, setIsDirty] = useState(false);
 
-  const mark = useCallback((setter) => (e) => {
-    setter(e.target.value);
-    setIsDirty(true);
-  }, []);
+  const [blockDateInput, setBlockDateInput] = useState("");
+  const [editingDiscount, setEditingDiscount] = useState(null);
+  const [discountDateInput, setDiscountDateInput] = useState("");
 
-  const toggleAmenity = (item) => {
-    setAmenities((prev) =>
-      prev.includes(item) ? prev.filter((a) => a !== item) : [...prev, item]
-    );
-    setIsDirty(true);
-  };
+  const mark = useCallback((setter) => (e) => { setter(e.target.value); setIsDirty(true); }, []);
+  const touch = useCallback((setter) => (val) => { setter(val); setIsDirty(true); }, []);
 
-  // Show / hide the save bar whenever dirty state changes
   useEffect(() => {
-    if (isDirty) {
-      shopify.saveBar.show("apartment-save-bar");
-    } else {
-      shopify.saveBar.hide("apartment-save-bar");
-    }
+    if (isDirty) shopify.saveBar.show("apt-save-bar");
+    else shopify.saveBar.hide("apt-save-bar");
   }, [isDirty, shopify]);
 
-  // Toast on successful update (action returned {success:true})
   useEffect(() => {
     if (actionData?.success) {
       shopify.toast.show("Saved");
       setIsDirty(false);
-      // Update orig so discard works against the new saved values
-      orig.current = {
-        name, description, pricePerNight, bedrooms, bathrooms,
-        maxGuests, amenities, address, city, country,
-        checkInTime, checkOutTime, minNights, maxNights, status,
-      };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionData]);
 
-  // Toast when redirected here after creating a new apartment (?saved=1)
   useEffect(() => {
-    if (searchParams.get("saved")) {
-      shopify.toast.show("Apartment created");
-    }
+    if (searchParams.get("saved")) shopify.toast.show("Apartment created");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDiscard = () => {
-    const o = orig.current;
-    setName(o.name);
-    setDescription(o.description);
-    setPricePerNight(o.pricePerNight);
-    setBedrooms(o.bedrooms);
-    setBathrooms(o.bathrooms);
-    setMaxGuests(o.maxGuests);
-    setAmenities(o.amenities);
-    setAddress(o.address);
-    setCity(o.city);
-    setCountry(o.country);
-    setCheckInTime(o.checkInTime);
-    setCheckOutTime(o.checkOutTime);
-    setMinNights(o.minNights);
-    setMaxNights(o.maxNights);
-    setStatus(o.status);
+    setName(o.name); setStatus(o.status); setPricePerNight(o.pricePerNight);
+    setDescription(o.description); setBookingType(o.bookingType);
+    setCalendarStartDate(o.calendarStartDate); setCalendarEndDate(o.calendarEndDate);
+    setCheckInTime(o.checkInTime); setCheckOutTime(o.checkOutTime);
+    setMinNights(o.minNights); setMaxNights(o.maxNights);
+    setQuantityEnabled(o.quantityEnabled); setWeeklyAvailability(o.weeklyAvailability);
+    setBlockedDates(o.blockedDates); setBedrooms(o.bedrooms); setBathrooms(o.bathrooms);
+    setMaxGuests(o.maxGuests); setStockQuantity(o.stockQuantity);
+    setAddress(o.address); setCity(o.city); setCountry(o.country);
+    setAmenities(o.amenities); setDiscountedDates(o.discountedDates);
+    setConditionalDiscounts(o.conditionalDiscounts); setPayNowEnabled(o.payNowEnabled);
+    setPayNowPercent(o.payNowPercent); setDepositEnabled(o.depositEnabled);
+    setDepositType(o.depositType); setDepositAmount(o.depositAmount);
     setIsDirty(false);
   };
 
@@ -199,282 +304,580 @@ export default function ApartmentEditPage() {
       shopify.toast.show("Apartment name is required", { isError: true });
       return;
     }
-    const formData = new FormData();
-    formData.append("productId", productId);
-    formData.append("productTitle", productTitle);
-    formData.append("name", name);
-    formData.append("description", description);
-    formData.append("pricePerNight", pricePerNight);
-    formData.append("bedrooms", bedrooms);
-    formData.append("bathrooms", bathrooms);
-    formData.append("maxGuests", maxGuests);
-    amenities.forEach((a) => formData.append("amenities", a));
-    formData.append("address", address);
-    formData.append("city", city);
-    formData.append("country", country);
-    formData.append("checkInTime", checkInTime);
-    formData.append("checkOutTime", checkOutTime);
-    formData.append("minNights", minNights);
-    formData.append("maxNights", maxNights);
-    formData.append("status", status);
-    submit(formData, { method: "POST" });
+    const fd = new FormData();
+    // top-level columns
+    fd.append("productId", productId);
+    fd.append("productTitle", productTitle);
+    fd.append("name", name);
+    fd.append("status", status);
+    fd.append("pricePerNight", pricePerNight);
+    // settings fields
+    fd.append("description", description);
+    fd.append("bookingType", bookingType);
+    fd.append("calendarStartDate", calendarStartDate);
+    fd.append("calendarEndDate", calendarEndDate);
+    fd.append("checkInTime", checkInTime);
+    fd.append("checkOutTime", checkOutTime);
+    fd.append("minNights", minNights);
+    fd.append("maxNights", maxNights);
+    fd.append("quantityEnabled", String(quantityEnabled));
+    fd.append("weeklyAvailability", JSON.stringify(weeklyAvailability));
+    fd.append("blockedDates", JSON.stringify(blockedDates));
+    fd.append("bedrooms", bedrooms);
+    fd.append("bathrooms", bathrooms);
+    fd.append("maxGuests", maxGuests);
+    fd.append("stockQuantity", stockQuantity);
+    fd.append("address", address);
+    fd.append("city", city);
+    fd.append("country", country);
+    amenities.forEach((a) => fd.append("amenities", a));
+    fd.append("discountedDates", JSON.stringify(discountedDates));
+    fd.append("conditionalDiscounts", JSON.stringify(conditionalDiscounts));
+    fd.append("payNowEnabled", String(payNowEnabled));
+    fd.append("payNowPercent", payNowPercent);
+    fd.append("depositEnabled", String(depositEnabled));
+    fd.append("depositType", depositType);
+    fd.append("depositAmount", depositAmount);
+    submit(fd, { method: "POST" });
+  };
+
+  // ─ Block dates ─
+  const addBlockedDate = () => {
+    if (!blockDateInput || blockedDates.includes(blockDateInput)) return;
+    setBlockedDates((p) => [...p, blockDateInput].sort());
+    setBlockDateInput("");
+    setIsDirty(true);
+  };
+
+  // ─ Discounted dates ─
+  const addDateToDiscount = () => {
+    if (!discountDateInput || editingDiscount.dates.includes(discountDateInput)) return;
+    setEditingDiscount((p) => ({ ...p, dates: [...p.dates, discountDateInput].sort() }));
+    setDiscountDateInput("");
+  };
+  const saveDiscount = () => {
+    if (!editingDiscount.dates.length || !editingDiscount.value) return;
+    setDiscountedDates((p) => {
+      const exists = p.find((d) => d.id === editingDiscount.id);
+      return exists
+        ? p.map((d) => (d.id === editingDiscount.id ? editingDiscount : d))
+        : [...p, editingDiscount];
+    });
+    setEditingDiscount(null);
+    setIsDirty(true);
+  };
+
+  // ─ Conditional discounts ─
+  const addRule = () => {
+    setConditionalDiscounts((p) => [
+      ...p,
+      { id: uid(), condition: "minNights", conditionValue: "1", discountType: "percent", discountValue: "", applyMode: "once" },
+    ]);
+    setIsDirty(true);
+  };
+  const updateRule = (id, field, val) => {
+    setConditionalDiscounts((p) => p.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
+    setIsDirty(true);
+  };
+
+  // ─ Weekly availability ─
+  const updateDay = (dayKey, field, value) => {
+    setWeeklyAvailability((p) => ({ ...p, [dayKey]: { ...p[dayKey], [field]: value } }));
+    setIsDirty(true);
+  };
+
+  const fmtDate = (d) => {
+    if (!d) return "";
+    const [y, m, day] = d.split("-");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${months[parseInt(m) - 1]} ${parseInt(day)}, ${y}`;
   };
 
   return (
     <>
-      <SaveBar id="apartment-save-bar">
-        <button variant="primary" onClick={handleSave} loading={isSaving ? "" : undefined}>
-          Save
-        </button>
+      <SaveBar id="apt-save-bar">
+        <button variant="primary" onClick={handleSave} loading={isSaving ? "" : undefined}>Save</button>
         <button onClick={handleDiscard}>Discard</button>
       </SaveBar>
 
       <s-page heading={isNew ? "Create Apartment" : `Edit: ${apartment.name}`}>
-        {/* Linked product */}
+
+        {/* ── Linked Product ── */}
         <s-section heading="Linked Product">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              padding: "12px 16px",
-              background: "#f6f6f7",
-              borderRadius: "8px",
-              border: "1px solid #e1e3e5",
-            }}
-          >
+          <div style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px", background:"#f6f6f7", borderRadius:8, border:"1px solid #e1e3e5" }}>
+            <div style={{ width:48, height:48, borderRadius:8, background:"#e1e3e5", flexShrink:0 }} />
             <div>
-              <div style={{ fontSize: "13px", color: "#6d7175" }}>Product</div>
-              <div style={{ fontSize: "14px", fontWeight: 600 }}>{productTitle}</div>
-              <div style={{ fontSize: "12px", color: "#6d7175", marginTop: 2 }}>
-                ID: {productId}
-              </div>
+              <div style={{ fontSize:14, fontWeight:600, color:"#202223" }}>{productTitle}</div>
+              <div style={{ fontSize:12, color:"#6d7175", marginTop:2 }}>ID: {productId}</div>
             </div>
           </div>
         </s-section>
 
-        {/* Basic details */}
-        <s-section heading="Basic Details">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-            <div style={{ gridColumn: "1 / -1", ...fieldWrapStyle }}>
-              <label style={labelStyle}>Apartment Name *</label>
-              <input
-                type="text"
-                value={name}
-                onChange={mark(setName)}
-                placeholder="e.g. Ocean View Suite"
-                style={inputStyle}
-              />
+        {/* ══════════════ BOOKING SETTINGS ══════════════ */}
+        <s-section heading="Booking Settings">
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:14, fontWeight:500, color:"#202223", marginBottom:10 }}>Booking Type</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+              {[
+                { value:"single",   title:"Single",  icon:"📅", desc:"One fixed date per booking." },
+                { value:"range",    title:"Range",   icon:"📆", desc:"Customer selects a date range (check-in → check-out)." },
+                { value:"multiple", title:"Multiple",icon:"🗓️", desc:"Customer picks multiple individual dates." },
+              ].map(({ value, title, icon, desc }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => { setBookingType(value); setIsDirty(true); }}
+                  style={{
+                    padding:"16px 14px", textAlign:"left", cursor:"pointer",
+                    border:`2px solid ${bookingType === value ? "#008060" : "#e1e3e5"}`,
+                    borderRadius:10,
+                    background: bookingType === value ? "#f0faf6" : "#fff",
+                    transition:"all 0.15s",
+                  }}
+                >
+                  <div style={{ fontSize:20, marginBottom:6 }}>{icon}</div>
+                  <div style={{ fontSize:14, fontWeight:600, color: bookingType === value ? "#008060" : "#202223", marginBottom:4 }}>{title}</div>
+                  <div style={{ fontSize:12, color:"#6d7175", lineHeight:1.5 }}>{desc}</div>
+                </button>
+              ))}
             </div>
-            <div style={{ gridColumn: "1 / -1", ...fieldWrapStyle }}>
-              <label style={labelStyle}>Description</label>
-              <textarea
-                value={description}
-                onChange={mark(setDescription)}
-                placeholder="Describe the apartment..."
-                rows={4}
-                style={{ ...inputStyle, resize: "vertical" }}
-              />
-            </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Price per Night ($)</label>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={pricePerNight}
-                onChange={mark(setPricePerNight)}
-                placeholder="0.00"
-                style={inputStyle}
-              />
-            </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Status</label>
-              <select value={status} onChange={mark(setStatus)} style={inputStyle}>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+            <Field label="Apartment Name *">
+              <Inp type="text" value={name} onChange={mark(setName)} placeholder="e.g. Ocean View Suite" />
+            </Field>
+            <Field label="Status">
+              <Sel value={status} onChange={mark(setStatus)}>
                 <option value="active">Active</option>
                 <option value="draft">Draft</option>
                 <option value="inactive">Inactive</option>
-              </select>
+              </Sel>
+            </Field>
+            <Field label="Description" style={{ gridColumn:"1 / -1" }}>
+              <textarea value={description} onChange={mark(setDescription)} placeholder="Describe the apartment..." rows={3}
+                style={{ ...inputStyle, resize:"vertical" }} />
+            </Field>
+          </div>
+        </s-section>
+
+        {/* ══════════════ BLOCK DATES ══════════════ */}
+        <s-section heading="Block Dates">
+          <p style={{ margin:"0 0 14px", fontSize:13, color:"#6d7175" }}>
+            Mark specific dates as unavailable. Blocked dates cannot be booked by customers.
+          </p>
+          <div style={{ display:"flex", gap:10, marginBottom:14 }}>
+            <Inp type="date" value={blockDateInput} onChange={(e) => setBlockDateInput(e.target.value)} style={{ flex:1 }} />
+            <button type="button" onClick={addBlockedDate} style={primaryBtn}>+ Block Date</button>
+          </div>
+          {blockedDates.length > 0 ? (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+              {blockedDates.map((d) => (
+                <span key={d} style={tagStyle}>
+                  📅 {fmtDate(d)}
+                  <button type="button"
+                    onClick={() => { setBlockedDates((p) => p.filter((x) => x !== d)); setIsDirty(true); }}
+                    style={tagX}>×</button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize:13, color:"#8c9196", fontStyle:"italic" }}>No dates blocked yet.</div>
+          )}
+        </s-section>
+
+        {/* ══════════════ AVAILABILITY ══════════════ */}
+        <s-section heading="Availability">
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
+            <Field label="Calendar Start" hint="Earliest bookable date">
+              <Inp type="date" value={calendarStartDate} onChange={mark(setCalendarStartDate)} />
+            </Field>
+            <Field label="Calendar End" hint="Latest bookable date">
+              <Inp type="date" value={calendarEndDate} onChange={mark(setCalendarEndDate)} />
+            </Field>
+            <Field label="Check-in Time">
+              <Inp type="time" value={checkInTime} onChange={mark(setCheckInTime)} />
+            </Field>
+            <Field label="Check-out Time">
+              <Inp type="time" value={checkOutTime} onChange={mark(setCheckOutTime)} />
+            </Field>
+            <Field label="Min Nights">
+              <Inp type="number" min={1} value={minNights} onChange={mark(setMinNights)} placeholder="1" />
+            </Field>
+            <Field label="Max Nights">
+              <Inp type="number" min={1} value={maxNights} onChange={mark(setMaxNights)} placeholder="No limit" />
+            </Field>
+          </div>
+
+          <ToggleRow
+            label="Quantity Selector"
+            hint="Let customers choose quantity when booking"
+            enabled={quantityEnabled}
+            onChange={touch(setQuantityEnabled)}
+          />
+
+          <div style={{ marginTop:20 }}>
+            <div style={{ fontSize:14, fontWeight:500, color:"#202223", marginBottom:12 }}>Weekly Availability</div>
+            <div style={{ border:"1px solid #e1e3e5", borderRadius:8, overflow:"hidden" }}>
+              {DAYS.map(({ key, label }, i) => {
+                const day = weeklyAvailability?.[key] ?? { enabled: true, open: "00:00", close: "23:59" };
+                return (
+                  <div key={key} style={{
+                    display:"flex", alignItems:"center", gap:14, padding:"11px 16px",
+                    background: day.enabled ? "#fff" : "#fafafa",
+                    borderBottom: i < DAYS.length - 1 ? "1px solid #e1e3e5" : "none",
+                  }}>
+                    <div style={{ width:100, fontSize:14, fontWeight:500, color: day.enabled ? "#202223" : "#adb5bd" }}>{label}</div>
+                    <Toggle enabled={day.enabled} onChange={(v) => updateDay(key, "enabled", v)} />
+                    <span style={{ fontSize:12, fontWeight:700, width:28, color: day.enabled ? "#008060" : "#adb5bd" }}>
+                      {day.enabled ? "ON" : "OFF"}
+                    </span>
+                    <input type="time" value={day.open} disabled={!day.enabled}
+                      onChange={(e) => updateDay(key, "open", e.target.value)}
+                      style={{ ...inputStyle, width:120, opacity: day.enabled ? 1 : 0.4 }} />
+                    <span style={{ fontSize:13, color:"#6d7175" }}>to</span>
+                    <input type="time" value={day.close} disabled={!day.enabled}
+                      onChange={(e) => updateDay(key, "close", e.target.value)}
+                      style={{ ...inputStyle, width:120, opacity: day.enabled ? 1 : 0.4 }} />
+                  </div>
+                );
+              })}
             </div>
           </div>
         </s-section>
 
-        {/* Capacity */}
-        <s-section heading="Capacity">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Bedrooms</label>
-              <input
-                type="number"
-                min={0}
-                value={bedrooms}
-                onChange={mark(setBedrooms)}
-                placeholder="0"
-                style={inputStyle}
-              />
+        {/* ══════════════ STOCK MANAGEMENT ══════════════ */}
+        <s-section heading="Stock Management">
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
+            <Field label="Bedrooms">
+              <Inp type="number" min={0} value={bedrooms} onChange={mark(setBedrooms)} placeholder="0" />
+            </Field>
+            <Field label="Bathrooms">
+              <Inp type="number" min={0} value={bathrooms} onChange={mark(setBathrooms)} placeholder="0" />
+            </Field>
+            <Field label="Max Guests">
+              <Inp type="number" min={1} value={maxGuests} onChange={mark(setMaxGuests)} placeholder="1" />
+            </Field>
+          </div>
+
+          <ToggleRow
+            label="Track Stock Quantity"
+            hint="Limit the number of simultaneous bookings"
+            enabled={quantityEnabled}
+            onChange={touch(setQuantityEnabled)}
+          />
+          {quantityEnabled && (
+            <div style={{ marginTop:14 }}>
+              <Field label="Stock Quantity" hint="Max concurrent bookings allowed">
+                <Inp type="number" min={1} value={stockQuantity} onChange={mark(setStockQuantity)} placeholder="1" style={{ maxWidth:160 }} />
+              </Field>
             </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Bathrooms</label>
-              <input
-                type="number"
-                min={0}
-                value={bathrooms}
-                onChange={mark(setBathrooms)}
-                placeholder="0"
-                style={inputStyle}
-              />
-            </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Max Guests</label>
-              <input
-                type="number"
-                min={1}
-                value={maxGuests}
-                onChange={mark(setMaxGuests)}
-                placeholder="1"
-                style={inputStyle}
-              />
-            </div>
+          )}
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginTop:20 }}>
+            <Field label="Address" style={{ gridColumn:"1/-1" }}>
+              <Inp type="text" value={address} onChange={mark(setAddress)} placeholder="123 Beach Road" />
+            </Field>
+            <Field label="City">
+              <Inp type="text" value={city} onChange={mark(setCity)} placeholder="Miami" />
+            </Field>
+            <Field label="Country">
+              <Inp type="text" value={country} onChange={mark(setCountry)} placeholder="United States" />
+            </Field>
           </div>
         </s-section>
 
-        {/* Location */}
-        <s-section heading="Location">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-            <div style={{ gridColumn: "1 / -1", ...fieldWrapStyle }}>
-              <label style={labelStyle}>Address</label>
-              <input
-                type="text"
-                value={address}
-                onChange={mark(setAddress)}
-                placeholder="123 Beach Road"
-                style={inputStyle}
-              />
-            </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>City</label>
-              <input
-                type="text"
-                value={city}
-                onChange={mark(setCity)}
-                placeholder="Miami"
-                style={inputStyle}
-              />
-            </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Country</label>
-              <input
-                type="text"
-                value={country}
-                onChange={mark(setCountry)}
-                placeholder="United States"
-                style={inputStyle}
-              />
-            </div>
+        {/* ══════════════ PRICE ══════════════ */}
+        <s-section heading="Price">
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+            <Field label="Price per Night ($)">
+              <div style={{ position:"relative" }}>
+                <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"#6d7175", fontSize:14 }}>$</span>
+                <Inp type="number" min={0} step="0.01" value={pricePerNight} onChange={mark(setPricePerNight)} placeholder="0.00" style={{ paddingLeft:26 }} />
+              </div>
+            </Field>
           </div>
         </s-section>
 
-        {/* Booking Rules */}
-        <s-section heading="Booking Rules">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr 1fr",
-              gap: "16px",
-            }}
-          >
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Check-in Time</label>
-              <input
-                type="time"
-                value={checkInTime}
-                onChange={mark(setCheckInTime)}
-                style={inputStyle}
-              />
+        {/* ══════════════ DISCOUNTED DATES ══════════════ */}
+        <s-section heading="Discounted Dates">
+          <p style={{ margin:"0 0 16px", fontSize:13, color:"#6d7175" }}>
+            Set a discount for specific dates. Add multiple date groups each with their own discount.
+          </p>
+          {discountedDates.length > 0 && (
+            <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
+              {discountedDates.map((item) => (
+                <div key={item.id} style={discountRowStyle}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:4 }}>
+                      {item.dates.map((d) => (
+                        <span key={d} style={{ ...tagStyle, fontSize:12 }}>📅 {fmtDate(d)}</span>
+                      ))}
+                    </div>
+                    <span style={discountBadge(item.type)}>
+                      {item.type === "percent" ? `${item.value}% off` : `$${item.value} off`}
+                    </span>
+                  </div>
+                  <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                    <button type="button"
+                      onClick={() => { setEditingDiscount(item); setDiscountDateInput(""); }}
+                      style={outlineBtn}>Edit</button>
+                    <button type="button"
+                      onClick={() => { setDiscountedDates((p) => p.filter((d) => d.id !== item.id)); setIsDirty(true); }}
+                      style={deleteBtn}>Remove</button>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Check-out Time</label>
-              <input
-                type="time"
-                value={checkOutTime}
-                onChange={mark(setCheckOutTime)}
-                style={inputStyle}
-              />
+          )}
+
+          {editingDiscount ? (
+            <div style={editCardStyle}>
+              <div style={{ fontSize:14, fontWeight:600, color:"#202223", marginBottom:14 }}>
+                {discountedDates.find((d) => d.id === editingDiscount.id) ? "Edit Discount Group" : "New Discount Group"}
+              </div>
+              <div style={{ display:"flex", gap:10, marginBottom:12 }}>
+                <Inp type="date" value={discountDateInput} onChange={(e) => setDiscountDateInput(e.target.value)} style={{ flex:1 }} />
+                <button type="button" onClick={addDateToDiscount} style={primaryBtn}>+ Add Date</button>
+              </div>
+              {editingDiscount.dates.length > 0 && (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+                  {editingDiscount.dates.map((d) => (
+                    <span key={d} style={tagStyle}>
+                      📅 {fmtDate(d)}
+                      <button type="button"
+                        onClick={() => setEditingDiscount((p) => ({ ...p, dates: p.dates.filter((x) => x !== d) }))}
+                        style={tagX}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+                <Field label="Discount Type">
+                  <Sel value={editingDiscount.type}
+                    onChange={(e) => setEditingDiscount((p) => ({ ...p, type: e.target.value }))}>
+                    <option value="percent">Percentage (%)</option>
+                    <option value="flat">Flat Amount ($)</option>
+                  </Sel>
+                </Field>
+                <Field label={editingDiscount.type === "percent" ? "Percentage" : "Amount ($)"}>
+                  <Inp type="number" min={0} step={editingDiscount.type === "percent" ? "1" : "0.01"}
+                    value={editingDiscount.value}
+                    onChange={(e) => setEditingDiscount((p) => ({ ...p, value: e.target.value }))}
+                    placeholder={editingDiscount.type === "percent" ? "20" : "50.00"} />
+                </Field>
+              </div>
+              <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+                <button type="button" onClick={() => setEditingDiscount(null)} style={ghostBtn}>Cancel</button>
+                <button type="button" onClick={saveDiscount}
+                  disabled={!editingDiscount.dates.length || !editingDiscount.value}
+                  style={{ ...primaryBtn, opacity: (!editingDiscount.dates.length || !editingDiscount.value) ? 0.5 : 1 }}>
+                  Save Group
+                </button>
+              </div>
             </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Min Nights</label>
-              <input
-                type="number"
-                min={1}
-                value={minNights}
-                onChange={mark(setMinNights)}
-                placeholder="1"
-                style={inputStyle}
-              />
-            </div>
-            <div style={fieldWrapStyle}>
-              <label style={labelStyle}>Max Nights</label>
-              <input
-                type="number"
-                min={1}
-                value={maxNights}
-                onChange={mark(setMaxNights)}
-                placeholder="No limit"
-                style={inputStyle}
-              />
-            </div>
-          </div>
+          ) : (
+            <button type="button"
+              onClick={() => { setEditingDiscount({ id: uid(), dates: [], type: "percent", value: "" }); setDiscountDateInput(""); }}
+              style={outlineBtn}>
+              + Add Discount Group
+            </button>
+          )}
         </s-section>
 
-        {/* Amenities */}
+        {/* ══════════════ CONDITIONAL DISCOUNTS ══════════════ */}
+        <s-section heading="Conditional Discounts">
+          <p style={{ margin:"0 0 16px", fontSize:13, color:"#6d7175" }}>
+            Automatically apply discounts when booking conditions are met.
+          </p>
+          {conditionalDiscounts.length > 0 && (
+            <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
+              {conditionalDiscounts.map((rule) => (
+                <div key={rule.id} style={editCardStyle}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:12, marginBottom:12 }}>
+                    <Field label="Based On">
+                      <Sel value={rule.condition} onChange={(e) => updateRule(rule.id, "condition", e.target.value)}>
+                        <option value="minNights">Min Nights</option>
+                        <option value="minQty">Min Quantity</option>
+                        <option value="minTotal">Min Total ($)</option>
+                      </Sel>
+                    </Field>
+                    <Field label={rule.condition === "minNights" ? "Min Nights" : rule.condition === "minQty" ? "Min Qty" : "Min Total ($)"}>
+                      <Inp type="number" min={0} step={rule.condition === "minTotal" ? "0.01" : "1"}
+                        value={rule.conditionValue}
+                        onChange={(e) => updateRule(rule.id, "conditionValue", e.target.value)}
+                        placeholder="0" />
+                    </Field>
+                    <Field label="Discount Type">
+                      <Sel value={rule.discountType} onChange={(e) => updateRule(rule.id, "discountType", e.target.value)}>
+                        <option value="percent">Percentage (%)</option>
+                        <option value="flat">Flat Amount ($)</option>
+                      </Sel>
+                    </Field>
+                    <Field label={rule.discountType === "percent" ? "Discount %" : "Amount ($)"}>
+                      <Inp type="number" min={0} step={rule.discountType === "percent" ? "1" : "0.01"}
+                        value={rule.discountValue}
+                        onChange={(e) => updateRule(rule.id, "discountValue", e.target.value)}
+                        placeholder="0" />
+                    </Field>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"flex-end", gap:16 }}>
+                    <Field label="Apply Mode" style={{ flex:1 }}>
+                      <Sel value={rule.applyMode} onChange={(e) => updateRule(rule.id, "applyMode", e.target.value)}>
+                        <option value="once">Single time — applied once to total</option>
+                        <option value="each">Per unit — multiplied per night / item</option>
+                      </Sel>
+                    </Field>
+                    <button type="button"
+                      onClick={() => { setConditionalDiscounts((p) => p.filter((r) => r.id !== rule.id)); setIsDirty(true); }}
+                      style={deleteBtn}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <button type="button" onClick={addRule} style={outlineBtn}>+ Add Discount Rule</button>
+        </s-section>
+
+        {/* ══════════════ PAY NOW / ONLINE ══════════════ */}
+        <s-section heading="Pay Now / Online Payment">
+          <ToggleRow
+            label="Enable Online Payment"
+            hint="Customers pay online at the time of booking"
+            enabled={payNowEnabled}
+            onChange={touch(setPayNowEnabled)}
+          />
+          {payNowEnabled && (
+            <div style={{ marginTop:16, paddingTop:16, borderTop:"1px solid #f1f1f1" }}>
+              <Field label="Percentage to Pay Now" hint="100% = full payment upfront · 50% = half now, half later">
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <Inp type="number" min={1} max={100} value={payNowPercent} onChange={mark(setPayNowPercent)}
+                    placeholder="100" style={{ maxWidth:120 }} />
+                  <span style={{ fontSize:14, color:"#6d7175" }}>%</span>
+                </div>
+              </Field>
+            </div>
+          )}
+        </s-section>
+
+        {/* ══════════════ DEPOSIT ══════════════ */}
+        <s-section heading="Deposit">
+          <ToggleRow
+            label="Require Deposit"
+            hint="Collect a deposit when the booking is confirmed"
+            enabled={depositEnabled}
+            onChange={touch(setDepositEnabled)}
+          />
+          {depositEnabled && (
+            <div style={{ marginTop:16, paddingTop:16, borderTop:"1px solid #f1f1f1" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                <Field label="Deposit Type">
+                  <Sel value={depositType} onChange={mark(setDepositType)}>
+                    <option value="percent">Percentage of total (%)</option>
+                    <option value="flat">Fixed amount ($)</option>
+                  </Sel>
+                </Field>
+                <Field label={depositType === "percent" ? "Deposit %" : "Deposit Amount ($)"}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <Inp type="number" min={0}
+                      step={depositType === "percent" ? "1" : "0.01"}
+                      max={depositType === "percent" ? 100 : undefined}
+                      value={depositAmount}
+                      onChange={mark(setDepositAmount)}
+                      placeholder={depositType === "percent" ? "20" : "100.00"}
+                      style={{ flex:1 }} />
+                    <span style={{ fontSize:14, color:"#6d7175" }}>{depositType === "percent" ? "%" : "$"}</span>
+                  </div>
+                </Field>
+              </div>
+            </div>
+          )}
+        </s-section>
+
+        {/* ══════════════ AMENITIES ══════════════ */}
         <s-section heading="Amenities">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-              gap: "10px",
-            }}
-          >
-            {AMENITIES.map((item) => (
-              <label
-                key={item}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  padding: "8px 12px",
-                  border: `1px solid ${amenities.includes(item) ? "#008060" : "#e1e3e5"}`,
-                  borderRadius: "8px",
-                  background: amenities.includes(item) ? "#f0faf6" : "#fff",
-                  userSelect: "none",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={amenities.includes(item)}
-                  onChange={() => toggleAmenity(item)}
-                  style={{ accentColor: "#008060" }}
-                />
-                {item}
-              </label>
-            ))}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px,1fr))", gap:10 }}>
+            {AMENITIES.map((item) => {
+              const on = amenities.includes(item);
+              return (
+                <label key={item} style={{
+                  display:"flex", alignItems:"center", gap:8, cursor:"pointer",
+                  fontSize:14, padding:"8px 12px",
+                  border:`1px solid ${on ? "#008060" : "#e1e3e5"}`,
+                  borderRadius:8, background: on ? "#f0faf6" : "#fff", userSelect:"none",
+                }}>
+                  <input type="checkbox" checked={on}
+                    onChange={() => { setAmenities((p) => p.includes(item) ? p.filter((a) => a !== item) : [...p, item]); setIsDirty(true); }}
+                    style={{ accentColor:"#008060" }} />
+                  {item}
+                </label>
+              );
+            })}
           </div>
         </s-section>
+
       </s-page>
     </>
   );
 }
 
-const fieldWrapStyle = { display: "flex", flexDirection: "column", gap: "4px" };
-const labelStyle = { fontSize: "14px", fontWeight: 500, color: "#202223" };
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const inputStyle = {
-  padding: "8px 12px",
-  border: "1px solid #c9cccf",
-  borderRadius: "8px",
-  fontSize: "14px",
-  background: "#fff",
-  width: "100%",
-  boxSizing: "border-box",
+  padding:"8px 12px", border:"1px solid #c9cccf", borderRadius:8, fontSize:14,
+  background:"#fff", width:"100%", boxSizing:"border-box", outline:"none",
 };
+
+const toggleRowStyle = {
+  display:"flex", alignItems:"center", justifyContent:"space-between",
+  padding:"12px 0", borderTop:"1px solid #f1f2f3", marginTop:4,
+};
+
+const tagStyle = {
+  display:"inline-flex", alignItems:"center", gap:6, padding:"4px 10px",
+  background:"#f0f0f0", borderRadius:16, fontSize:13, color:"#202223",
+};
+
+const tagX = {
+  border:"none", background:"transparent", cursor:"pointer",
+  fontSize:16, color:"#6d7175", padding:0, lineHeight:1,
+};
+
+const primaryBtn = {
+  padding:"8px 16px", background:"#008060", color:"#fff",
+  border:"none", borderRadius:8, fontSize:14, fontWeight:600,
+  cursor:"pointer", whiteSpace:"nowrap",
+};
+
+const outlineBtn = {
+  padding:"8px 16px", background:"#fff", color:"#008060",
+  border:"1px solid #008060", borderRadius:8, fontSize:14, fontWeight:600,
+  cursor:"pointer", whiteSpace:"nowrap",
+};
+
+const ghostBtn = {
+  padding:"8px 16px", background:"#fff", color:"#6d7175",
+  border:"1px solid #e1e3e5", borderRadius:8, fontSize:14, fontWeight:500, cursor:"pointer",
+};
+
+const deleteBtn = {
+  padding:"7px 14px", background:"#fff", color:"#c0392b",
+  border:"1px solid #f5c6cb", borderRadius:8, fontSize:13, fontWeight:500,
+  cursor:"pointer", whiteSpace:"nowrap",
+};
+
+const editCardStyle = {
+  border:"1px solid #e1e3e5", borderRadius:10, padding:16, background:"#f9fafb",
+};
+
+const discountRowStyle = {
+  display:"flex", alignItems:"center", gap:16, padding:"14px 16px",
+  border:"1px solid #e1e3e5", borderRadius:8, background:"#fff",
+};
+
+const discountBadge = (type) => ({
+  display:"inline-block", padding:"2px 10px", borderRadius:12,
+  fontSize:12, fontWeight:600,
+  background: type === "percent" ? "#fff3cd" : "#d4edda",
+  color: type === "percent" ? "#856404" : "#155724",
+});

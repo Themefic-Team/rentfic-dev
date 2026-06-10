@@ -1,0 +1,39 @@
+<div id="rentfic-app-embed"
+  data-shop="{{ shop.permanent_domain }}"
+  data-enabled="{{ block.settings.enabled }}"
+  data-currency="{{ shop.currency }}"
+  data-money-format="{{ shop.money_format | escape }}"
+  data-primary-color="{{ block.settings.primary_color }}"
+  data-button-text="{{ block.settings.button_text | escape }}"
+  style="display:none;">
+</div>
+
+{{ 'rentfic-booking.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'rentfic-booking.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Rentfic",
+  "target": "body",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enabled",
+      "label": "Enable Rentfic",
+      "default": true
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary color",
+      "default": "#008060"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Book button text",
+      "default": "Reserve Now"
+    }
+  ]
+}
+{% endschema %}

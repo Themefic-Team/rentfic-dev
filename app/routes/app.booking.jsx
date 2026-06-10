@@ -1,43 +1,71 @@
 import { useState } from "react";
+import { useLoaderData } from "react-router";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
-const BOOKINGS = [
-  { id: "#1042", guest: "Sarah Johnson",   email: "sarah.j@email.com",    apartment: "Ocean View Suite",   checkIn: "Jun 12, 2026", checkOut: "Jun 16, 2026", nights: 4, total: "$580",   status: "confirmed" },
-  { id: "#1041", guest: "Marco Rossi",     email: "marco.r@email.com",    apartment: "Downtown Loft",      checkIn: "Jun 10, 2026", checkOut: "Jun 14, 2026", nights: 4, total: "$420",   status: "confirmed" },
-  { id: "#1040", guest: "Aisha Patel",     email: "aisha.p@email.com",    apartment: "Garden Studio",      checkIn: "Jun 8, 2026",  checkOut: "Jun 11, 2026", nights: 3, total: "$315",   status: "completed" },
-  { id: "#1039", guest: "James Carter",    email: "james.c@email.com",    apartment: "Rooftop Penthouse",  checkIn: "Jun 5, 2026",  checkOut: "Jun 10, 2026", nights: 5, total: "$950",   status: "completed" },
-  { id: "#1038", guest: "Elena Müller",    email: "elena.m@email.com",    apartment: "Ocean View Suite",   checkIn: "Jun 1, 2026",  checkOut: "Jun 4, 2026",  nights: 3, total: "$435",   status: "cancelled" },
-  { id: "#1037", guest: "Tom Harris",      email: "tom.h@email.com",      apartment: "Downtown Loft",      checkIn: "May 28, 2026", checkOut: "Jun 1, 2026",  nights: 4, total: "$420",   status: "completed" },
-  { id: "#1036", guest: "Priya Singh",     email: "priya.s@email.com",    apartment: "Garden Studio",      checkIn: "May 22, 2026", checkOut: "May 27, 2026", nights: 5, total: "$525",   status: "completed" },
-  { id: "#1035", guest: "Lucas Bernard",   email: "lucas.b@email.com",    apartment: "Rooftop Penthouse",  checkIn: "May 18, 2026", checkOut: "May 21, 2026", nights: 3, total: "$570",   status: "completed" },
-  { id: "#1034", guest: "Mei Zhang",       email: "mei.z@email.com",      apartment: "Ocean View Suite",   checkIn: "May 10, 2026", checkOut: "May 17, 2026", nights: 7, total: "$1,015", status: "completed" },
-  { id: "#1033", guest: "Daniel Okafor",   email: "daniel.o@email.com",   apartment: "Downtown Loft",      checkIn: "May 5, 2026",  checkOut: "May 8, 2026",  nights: 3, total: "$315",   status: "cancelled" },
-  { id: "#1032", guest: "Sofia Hernandez", email: "sofia.h@email.com",    apartment: "Garden Studio",      checkIn: "Apr 28, 2026", checkOut: "May 3, 2026",  nights: 5, total: "$525",   status: "completed" },
-  { id: "#1031", guest: "Liam O'Brien",    email: "liam.ob@email.com",    apartment: "Rooftop Penthouse",  checkIn: "Apr 20, 2026", checkOut: "Apr 25, 2026", nights: 5, total: "$950",   status: "completed" },
-];
+export const loader = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
 
-const STATUS_STYLE = {
-  confirmed: { background: "#d4edda", color: "#155724" },
-  completed: { background: "#e2e3e5", color: "#383d41" },
-  cancelled: { background: "#f8d7da", color: "#721c24" },
+  const bookings = await prisma.booking.findMany({
+    where: { shop: session.shop },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const formatted = bookings.map((b) => ({
+    id:        b.id,
+    guest:     b.customerName  || "—",
+    email:     b.customerEmail || "",
+    apartment: b.productTitle  || "—",
+    checkIn:   fmtDate(b.startDate),
+    checkOut:  fmtDate(b.endDate),
+    nights:    b.nights ?? "—",
+    total:     b.totalPrice != null ? fmtCurrency(b.totalPrice) : "—",
+    status:    b.status,
+    orderId:   b.orderNumber ? `#${b.orderNumber}` : `…${b.id.slice(-6)}`,
+    createdAt: b.createdAt,
+  }));
+
+  return { bookings: formatted };
 };
 
-const ALL_STATUSES = ["all", "confirmed", "completed", "cancelled"];
+function fmtDate(str) {
+  if (!str) return "—";
+  const [y, m, d] = str.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function fmtCurrency(amount) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+}
+
+const STATUS_STYLE = {
+  pending:   { background: "#fff3cd", color: "#856404" },
+  confirmed: { background: "#d4edda", color: "#155724" },
+  cancelled: { background: "#f8d7da", color: "#721c24" },
+  completed: { background: "#e2e3e5", color: "#383d41" },
+};
+
+const ALL_STATUSES = ["all", "pending", "confirmed", "completed", "cancelled"];
 
 export default function BookingPage() {
+  const { bookings } = useLoaderData();
   const [search,    setSearch]    = useState("");
   const [statusTab, setStatusTab] = useState("all");
 
-  const filtered = BOOKINGS.filter((b) => {
+  const filtered = bookings.filter((b) => {
+    const q = search.toLowerCase();
     const matchSearch =
-      b.guest.toLowerCase().includes(search.toLowerCase()) ||
-      b.apartment.toLowerCase().includes(search.toLowerCase()) ||
-      b.id.toLowerCase().includes(search.toLowerCase());
+      b.guest.toLowerCase().includes(q) ||
+      b.apartment.toLowerCase().includes(q) ||
+      b.orderId.toLowerCase().includes(q) ||
+      b.email.toLowerCase().includes(q);
     const matchStatus = statusTab === "all" || b.status === statusTab;
     return matchSearch && matchStatus;
   });
 
   const counts = ALL_STATUSES.reduce((acc, s) => {
-    acc[s] = s === "all" ? BOOKINGS.length : BOOKINGS.filter((b) => b.status === s).length;
+    acc[s] = s === "all" ? bookings.length : bookings.filter((b) => b.status === s).length;
     return acc;
   }, {});
 
@@ -84,17 +112,7 @@ export default function BookingPage() {
                 }}
               >
                 {s.charAt(0).toUpperCase() + s.slice(1)}
-                <span
-                  style={{
-                    marginLeft: "6px",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    padding: "1px 6px",
-                    borderRadius: "10px",
-                    background: "#f1f2f3",
-                    color: "#6d7175",
-                  }}
-                >
+                <span style={{ marginLeft: "6px", fontSize: "11px", fontWeight: 600, padding: "1px 6px", borderRadius: "10px", background: "#f1f2f3", color: "#6d7175" }}>
                   {counts[s]}
                 </span>
               </button>
@@ -115,20 +133,17 @@ export default function BookingPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: "32px", textAlign: "center", fontSize: "14px", color: "#6d7175" }}>
-                    No bookings found.
+                  <td colSpan={8} style={{ padding: "48px", textAlign: "center", fontSize: "14px", color: "#6d7175" }}>
+                    {bookings.length === 0 ? "No bookings yet." : "No bookings match your search."}
                   </td>
                 </tr>
               ) : (
                 filtered.map((b, i) => (
-                  <tr
-                    key={b.id}
-                    style={{ borderBottom: i < filtered.length - 1 ? "1px solid #e1e3e5" : "none" }}
-                  >
-                    <td style={{ ...tdStyle, fontWeight: 600 }}>{b.id}</td>
+                  <tr key={b.id} style={{ borderBottom: i < filtered.length - 1 ? "1px solid #e1e3e5" : "none" }}>
+                    <td style={{ ...tdStyle, fontWeight: 600, fontFamily: "monospace", fontSize: "13px" }}>{b.orderId}</td>
                     <td style={tdStyle}>
                       <div style={{ fontWeight: 500 }}>{b.guest}</div>
-                      <div style={{ fontSize: "12px", color: "#6d7175" }}>{b.email}</div>
+                      {b.email && <div style={{ fontSize: "12px", color: "#6d7175" }}>{b.email}</div>}
                     </td>
                     <td style={{ ...tdStyle, color: "#6d7175" }}>{b.apartment}</td>
                     <td style={tdStyle}>{b.checkIn}</td>
@@ -141,7 +156,7 @@ export default function BookingPage() {
                         fontWeight: 600,
                         padding: "2px 10px",
                         borderRadius: "10px",
-                        ...STATUS_STYLE[b.status],
+                        ...(STATUS_STYLE[b.status] || STATUS_STYLE.pending),
                       }}>
                         {b.status.charAt(0).toUpperCase() + b.status.slice(1)}
                       </span>
@@ -153,9 +168,8 @@ export default function BookingPage() {
           </table>
         </div>
 
-        {/* Row count */}
         <div style={{ marginTop: "10px", fontSize: "13px", color: "#6d7175" }}>
-          Showing {filtered.length} of {BOOKINGS.length} bookings
+          Showing {filtered.length} of {bookings.length} booking{bookings.length !== 1 ? "s" : ""}
         </div>
       </s-section>
 
@@ -163,27 +177,20 @@ export default function BookingPage() {
       <s-section slot="aside" heading="Summary">
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {[
-            { label: "Total bookings",  value: BOOKINGS.length },
-            { label: "Confirmed",       value: counts.confirmed },
-            { label: "Completed",       value: counts.completed },
-            { label: "Cancelled",       value: counts.cancelled },
+            { label: "Total bookings", value: bookings.length },
+            { label: "Pending",        value: counts.pending },
+            { label: "Confirmed",      value: counts.confirmed },
+            { label: "Completed",      value: counts.completed },
+            { label: "Cancelled",      value: counts.cancelled },
           ].map((s) => (
-            <div
-              key={s.label}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "14px",
-                paddingBottom: "10px",
-                borderBottom: "1px solid #f1f2f3",
-              }}
-            >
+            <div key={s.label} style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", paddingBottom: "10px", borderBottom: "1px solid #f1f2f3" }}>
               <span style={{ color: "#6d7175" }}>{s.label}</span>
               <span style={{ fontWeight: 600, color: "#202223" }}>{s.value}</span>
             </div>
           ))}
         </div>
       </s-section>
+
     </s-page>
   );
 }

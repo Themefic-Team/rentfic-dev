@@ -44,29 +44,45 @@ model NotificationConfig {
 }
 
 model Apartment {
-  id            String   @id @default(cuid())
-  shop          String
-  productId     String
-  productTitle  String
-  name          String
-  description   String?
+  // ── Queryable / list-display columns ──────────────────
+  id           String   @id @default(cuid())
+  shop         String
+  productId    String
+  productTitle String
+  name         String
+  status       String   @default("active")
   pricePerNight Float?
-  bedrooms      Int?
-  bathrooms     Int?
-  maxGuests     Int?
-  amenities     String[]
-  address       String?
-  city          String?
-  country       String?
-  checkInTime   String?
-  checkOutTime  String?
-  minNights     Int?     @default(1)
-  maxNights     Int?
-  status        String   @default("active")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  // ── All other settings stored as one JSON blob ─────────
+  settings     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([shop])
+}
+
+model Booking {
+  id                  String   @id @default(cuid())
+  shop                String
+  apartmentId         String
+  productId           String
+  productTitle        String
+  orderId             String?
+  orderNumber         String?
+  customerName        String?
+  customerEmail       String?
+  startDate           String
+  endDate             String?
+  nights              Int?
+  totalPrice          Float?
+  depositAmount       Float?
+  status              String   @default("pending")  // pending | confirmed | cancelled
+  lineItemProperties  Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([shop])
+  @@index([apartmentId])
+  @@index([orderId])
 }
 
 model Session {

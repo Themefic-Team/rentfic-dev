@@ -7,7 +7,7 @@ name = "rentfic-dev"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,write_metaobjects,write_metaobject_definitions"
+scopes = "write_products,write_metaobjects,write_metaobject_definitions,read_orders"
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
@@ -33,6 +33,11 @@ required = true
 name = "Description"
 type = "multi_line_text_field"
 
+[app_proxy]
+url = "https://example.com/api/proxy"
+subpath = "rentfic"
+prefix = "apps"
+
 [webhooks]
 api_version = "2026-07"
 
@@ -44,9 +49,9 @@ api_version = "2026-07"
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
+
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
 
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true

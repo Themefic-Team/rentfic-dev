@@ -6,7 +6,10 @@
       "PowerShell(Stop-Process -Id 8704, 11504, 16744 -Force -ErrorAction SilentlyContinue)",
       "PowerShell(npx prisma generate 2>&1)",
       "Bash(node -e \"const m = require\\('d:/shopify-app/rentfic-dev/node_modules/@shopify/app-bridge-react'\\); console.log\\(Object.keys\\(m\\).filter\\(k => k.toLowerCase\\(\\).includes\\('save'\\) || k.toLowerCase\\(\\).includes\\('bar'\\)\\)\\)\")",
-      "PowerShell($procs = Get-WmiObject Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -match \"react-router|vite\" }; $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 2; cd \"d:\\\\shopify-app\\\\rentfic-dev\"; npx prisma generate 2>&1)"
+      "PowerShell($procs = Get-WmiObject Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -match \"react-router|vite\" }; $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 2; cd \"d:\\\\shopify-app\\\\rentfic-dev\"; npx prisma generate 2>&1)",
+      "Bash(cd /d \"d:\\\\shopify-app\\\\rentfic-dev\")",
+      "Bash(npm run *)",
+      "Bash(del \"d:\\\\shopify-app\\\\rentfic-dev\\\\extensions\\\\rentfic\\\\blocks\\\\booking_widget.liquid\")"
     ]
   }
 }
