@@ -1,10 +1,21 @@
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useRouteError } from "react-router";
+import { useRouteError, useLoaderData } from "react-router";
+import { PlanCard } from "../components/PlanCard";
+import prisma from "../db.server";
+import { getPlanLimits } from "../plans.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+  const [shopRecord, apartmentCount] = await Promise.all([
+    prisma.shop.findUnique({ where: { shop } }),
+    prisma.apartment.count({ where: { shop } }),
+  ]);
+  const appPlan = shopRecord?.plan ?? "free";
+  const limits  = getPlanLimits(appPlan);
+  const apartmentLimit = limits.apartments === Infinity ? null : limits.apartments;
+  return { appPlan, apartmentCount, apartmentLimit, renewalDate: null };
 };
 
 // ─── Dummy data ───────────────────────────────────────────────────────────────
@@ -33,8 +44,10 @@ const STATUS_STYLE = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const planData = useLoaderData();
   return (
     <s-page heading="Dashboard">
+      <PlanCard data={planData} />
 
       {/* Stats */}
       <s-section heading="Overview">

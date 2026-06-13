@@ -3,16 +3,22 @@ import { useLoaderData, useSubmit, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getPlanLimits } from "../plans.server";
+import { PlanCard } from "../components/PlanCard";
 
 const PAGE_SIZE = 10;
 
 export const loader = async ({ request }) => {
   const { session: { shop } } = await authenticate.admin(request);
-  const apartments = await prisma.apartment.findMany({
-    where: { shop },
-    orderBy: { createdAt: "desc" },
-  });
-  return { apartments };
+  const [apartments, shopRecord] = await Promise.all([
+    prisma.apartment.findMany({ where: { shop }, orderBy: { createdAt: "desc" } }),
+    prisma.shop.findUnique({ where: { shop } }),
+  ]);
+  const limits = getPlanLimits(shopRecord?.plan);
+  return {
+    apartments,
+    apartmentLimit: limits.apartments,
+  };
 };
 
 export const action = async ({ request }) => {
@@ -90,7 +96,8 @@ const IconCalSmall = () => (
 );
 
 export default function ApartmentsIndexPage() {
-  const { apartments } = useLoaderData();
+  const { apartments, apartmentLimit } = useLoaderData();
+  const atLimit = apartmentLimit !== Infinity && apartments.length >= apartmentLimit;
   const submit = useSubmit();
   const navigate = useNavigate();
   const shopify = useAppBridge();
@@ -137,6 +144,10 @@ export default function ApartmentsIndexPage() {
   };
 
   const handleCreate = async () => {
+    if (atLimit) {
+      shopify.toast.show(`Free plan allows ${apartmentLimit} apartment. Upgrade to add more.`, { isError: true });
+      return;
+    }
     const result = await shopify.resourcePicker({ type: "product", multiple: false });
     const items = Array.isArray(result) ? result : result ? [result] : [];
     if (!items.length) return;
@@ -162,9 +173,10 @@ export default function ApartmentsIndexPage() {
   if (apartments.length === 0) {
     return (
       <s-page heading="Apartments">
-        <s-button slot="primary-action" onClick={handleCreate}>
-          Create Apartment
+        <s-button slot="primary-action" onClick={handleCreate} disabled={atLimit ? "" : undefined}>
+          {atLimit ? "Plan Limit Reached" : "Create Apartment"}
         </s-button>
+        <PlanCard />
         <s-section>
           <div style={emptyStyle}>
             <img
@@ -193,6 +205,7 @@ export default function ApartmentsIndexPage() {
       <s-button slot="primary-action" onClick={handleCreate}>
         Create Apartment
       </s-button>
+      <PlanCard />
 
       <s-section>
         <div style={cardStyle}>

@@ -85,6 +85,17 @@ model Booking {
   @@index([orderId])
 }
 
+model NotificationLog {
+  id        String   @id @default(cuid())
+  shop      String
+  bookingId String
+  type      String
+  sentAt    DateTime @default(now())
+
+  @@unique([bookingId, type])
+  @@index([shop])
+}
+
 model Session {
   id            String    @id
   shop          String

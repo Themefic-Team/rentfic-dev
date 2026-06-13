@@ -2,10 +2,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request, params }) => {
-  // Verifies the Shopify HMAC signature from the App Proxy
   const { session } = await authenticate.public.appProxy(request);
-
-  // Storefront sends numeric product ID; our DB stores the GID
   const productGid = `gid://shopify/Product/${params.productId}`;
 
   const [apartment, shop] = await Promise.all([
@@ -25,19 +22,46 @@ export const loader = async ({ request, params }) => {
   const s = apartment.settings ?? {};
   const ss = shop?.settings ?? {};
 
-  // Only expose what the storefront widget needs — never expose internal IDs or full settings
   return Response.json({
     found: true,
     apartment: {
       id: apartment.id,
+      name: apartment.name,
+      description: s.description ?? null,
       bookingType: s.bookingType ?? "single",
       pricePerNight: apartment.pricePerNight ?? 0,
+      // dates & times
       calendarStartDate: s.calendarStartDate ?? null,
       calendarEndDate: s.calendarEndDate ?? null,
-      minNights: s.minNights ?? 1,
-      maxNights: s.maxNights ?? null,
+      checkInTime: s.checkInTime ?? null,
+      checkOutTime: s.checkOutTime ?? null,
+      // days/nights constraints
+      minDays: s.minDays ?? 1,
+      maxDays: s.maxDays ?? null,
+      // guest limits
+      maxAdults: s.maxAdults ?? null,
+      maxChildren: s.maxChildren ?? null,
+      maxInfants: s.maxInfants ?? null,
+      maxGuests: s.maxGuests ?? null,
+      // availability
       blockedDates: s.blockedDates ?? [],
       weeklyAvailability: s.weeklyAvailability ?? null,
+      // property details
+      bedrooms: s.bedrooms ?? null,
+      bathrooms: s.bathrooms ?? null,
+      address: s.address ?? null,
+      city: s.city ?? null,
+      country: s.country ?? null,
+      amenities: s.amenities ?? [],
+      // fees & discounts
+      additionalFees: s.additionalFees ?? [],
+      conditionalDiscounts: s.conditionalDiscounts ?? [],
+      discountedDates: s.discountedDates ?? [],
+      // quantity / stock
+      quantityEnabled: s.quantityEnabled ?? false,
+      stockEnabled: s.quantityEnabled ?? false,
+      stockQuantity: s.stockQuantity ?? null,
+      // payment
       depositEnabled: s.depositEnabled ?? false,
       depositType: s.depositType ?? "percent",
       depositAmount: s.depositAmount ?? null,
@@ -51,6 +75,7 @@ export const loader = async ({ request, params }) => {
       startCalendar: ss.startCalendar ?? "current_date",
       redirectAfterCart: ss.redirectAfterCart ?? "automatic",
       fromPrice: ss.fromPrice ?? "automatic",
+      quantityPosition: ss.quantityPosition ?? "product_and_calendar",
       blockedDates: ss.blockedDates ?? [],
       depositType: ss.depositType ?? "percent",
       depositValue: ss.depositValue ?? null,

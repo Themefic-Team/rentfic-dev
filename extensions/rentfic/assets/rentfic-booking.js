@@ -6,97 +6,62 @@
     'July','August','September','October','November','December',
   ];
   const DAY_NAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const WEEK_DAYS  = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const WEEK_DAYS  = ['sun','mon','tue','wed','thu','fri','sat'];
 
-  // ─── Auto-inject entry point ──────────────────────────────────────────────
+  // ─── Boot ────────────────────────────────────────────────────────────────────
   function boot() {
     const embed = document.getElementById('rentfic-app-embed');
     if (!embed || embed.dataset.enabled === 'false') return;
 
-    // Only run on product pages
     const match = window.location.pathname.match(/\/products\/([^/?#]+)/);
     if (!match) return;
 
-    const handle = match[1];
-
-    // Get numeric product ID from Shopify's product JSON endpoint
-    fetch('/products/' + handle + '.js')
+    fetch('/products/' + match[1] + '.js')
       .then(function (r) { return r.json(); })
       .then(function (product) { injectWidget(embed, product.id); })
-      .catch(function () { /* not a rentfic product, stay silent */ });
+      .catch(function () {});
   }
 
   function injectWidget(embed, productId) {
-    // Create the widget container
     var container = document.createElement('div');
     container.id = 'rentfic-booking-widget';
-    container.dataset.productId  = productId;
-    container.dataset.currency   = embed.dataset.currency   || 'USD';
+    container.dataset.productId   = productId;
+    container.dataset.currency    = embed.dataset.currency    || 'USD';
     container.dataset.moneyFormat = embed.dataset.moneyFormat || '{{amount}}';
     container.dataset.primaryColor = embed.dataset.primaryColor || '#008060';
     container.dataset.buttonText  = embed.dataset.buttonText  || 'Reserve Now';
     container.innerHTML = '<div class="rentfic-loading">Checking availability…</div>';
 
-    // Insert before the product form (after description, where the hidden buttons were)
     var inserted = false;
-    var beforeFormSelectors = [
-      '.product-form',
-      '.product__form',
-      'form[action*="/cart/add"]',
-    ];
-
+    var beforeFormSelectors = ['.product-form', '.product__form', 'form[action*="/cart/add"]'];
     for (var i = 0; i < beforeFormSelectors.length; i++) {
       var form = document.querySelector(beforeFormSelectors[i]);
-      if (form) {
-        form.parentNode.insertBefore(container, form);
-        inserted = true;
-        break;
-      }
+      if (form) { form.parentNode.insertBefore(container, form); inserted = true; break; }
     }
-
-    // Try inserting after description
     if (!inserted) {
       var descSelectors = [
-        '.product__description',
-        '.product-description',
-        '[class*="product-description"]',
-        '.product__info .rte',
-        '.product-single__description',
-        '.product__details .rte',
+        '.product__description', '.product-description', '[class*="product-description"]',
+        '.product__info .rte', '.product-single__description', '.product__details .rte',
         '[data-product-description]',
       ];
       for (var j = 0; j < descSelectors.length; j++) {
         var desc = document.querySelector(descSelectors[j]);
-        if (desc) {
-          desc.parentNode.insertBefore(container, desc.nextSibling);
-          inserted = true;
-          break;
-        }
+        if (desc) { desc.parentNode.insertBefore(container, desc.nextSibling); inserted = true; break; }
       }
     }
-
-    // Fallback: append to the product info / main content area
     if (!inserted) {
-      var fallbackSelectors = [
-        '.product__info-container',
-        '.product-single__meta',
-        '.product__info',
-        'main .product',
-        'main',
-      ];
+      var fallbackSelectors = ['.product__info-container', '.product-single__meta', '.product__info', 'main .product', 'main'];
       for (var k = 0; k < fallbackSelectors.length; k++) {
         var wrap = document.querySelector(fallbackSelectors[k]);
         if (wrap) { wrap.appendChild(container); inserted = true; break; }
       }
     }
-
-    if (!inserted) return; // can't find a place to inject
+    if (!inserted) return;
 
     new RentficWidget(container);
   }
 
-  // ─── Widget class ─────────────────────────────────────────────────────────
-
+  // ─── Widget ───────────────────────────────────────────────────────────────────
   class RentficWidget {
     constructor(container) {
       this.container    = container;
@@ -117,31 +82,31 @@
       this.viewYear  = null;
       this.viewMonth = null;
 
+      this.guests   = { adults: 1, children: 0, infants: 0 };
+      this.quantity = 1;
+      this.calOpen  = true;
+
       this._init();
     }
 
     async _init() {
       try {
         const res  = await fetch('/apps/rentfic/apartment/' + this.productId);
+        if (!res.ok) throw new Error('API error ' + res.status);
         const data = await res.json();
-
-        if (!data.found) {
-          // Product is not registered as a rentfic apartment — remove injected element
-          this.container.remove();
-          return;
-        }
-
+        if (!data.found) { this.container.remove(); return; }
         this.apartment    = data.apartment;
         this.shopSettings = data.shopSettings || {};
-
+        this.calOpen      = (this.shopSettings.displayCalendar || 'always_open') !== 'default';
         this._setInitialViewMonth();
         this._render();
-      } catch (_) {
-        this.container.remove();
+      } catch (err) {
+        console.error('[Rentfic] widget error:', err);
+        this.container.innerHTML = `<div style="padding:16px;font-size:13px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">Booking widget failed to load. Check console for details.</div>`;
       }
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────
+    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     _setInitialViewMonth() {
       const today = new Date(); today.setHours(0,0,0,0);
@@ -228,7 +193,55 @@
       return 0;
     }
 
-    _calcTotal()   { return this._calcNights() * (this.apartment.pricePerNight || 0); }
+    _totalGuests() {
+      return this.guests.adults + this.guests.children + this.guests.infants;
+    }
+
+    _calcFees(nights) {
+      const qty  = this.quantity;
+      const base = qty * nights * (this.apartment.pricePerNight || 0);
+      return (this.apartment.additionalFees || []).map(fee => {
+        let computed;
+        if (fee.type === 'percent') {
+          computed = base * (parseFloat(fee.amount) / 100);
+        } else if (fee.applyPer === 'night') {
+          computed = qty * nights * parseFloat(fee.amount);
+        } else {
+          // flat per-booking: charged once per unit
+          computed = qty * parseFloat(fee.amount);
+        }
+        return { name: fee.name, type: fee.type, amount: fee.amount, applyPer: fee.applyPer, computed };
+      });
+    }
+
+    _calcDiscount(base, nights) {
+      const rules = this.apartment.conditionalDiscounts || [];
+      let total = 0;
+      for (const rule of rules) {
+        const cv = parseFloat(rule.conditionValue) || 0;
+        let met = false;
+        if (rule.condition === 'minDays' && nights >= cv) met = true;
+        if (rule.condition === 'minTotal'  && base >= cv)   met = true;
+        if (rule.condition === 'minQty'    && this._totalGuests() >= cv) met = true;
+        if (met) {
+          let d = rule.discountType === 'percent'
+            ? base * (parseFloat(rule.discountValue) / 100)
+            : parseFloat(rule.discountValue) || 0;
+          if (rule.applyMode === 'each') d *= nights;
+          total += d;
+        }
+      }
+      return total;
+    }
+
+    _calcTotal() {
+      const nights = this._calcNights();
+      const qty    = this.quantity;
+      const base   = qty * nights * (this.apartment.pricePerNight || 0);
+      const fees   = this._calcFees(nights).reduce((s, f) => s + f.computed, 0);
+      const disc   = this._calcDiscount(base, nights);
+      return Math.max(0, base + fees - disc);
+    }
 
     _calcDeposit(total) {
       const { depositEnabled, depositType, depositAmount } = this.apartment;
@@ -241,32 +254,42 @@
     }
 
     _fmtPrice(amount) {
-      return this.moneyFmt.replace(/\{\{amount[^}]*\}\}/g, parseFloat(amount).toFixed(2));
+      return this.moneyFmt.replace(/\{\{amount[^}]*\}\}/g, parseFloat(amount || 0).toFixed(2));
     }
 
-    // ─── Selection ────────────────────────────────────────────────────────
+    _fmtTime(t) {
+      if (!t) return null;
+      const [h, m] = t.split(':').map(Number);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    // ─── Selection ───────────────────────────────────────────────────────────
 
     _handleClick(date) {
       if (!this._isSelectable(date)) return;
-      const { bookingType, minNights, maxNights } = this.apartment;
+      const { bookingType, minDays, maxDays } = this.apartment;
 
       if (bookingType === 'single') {
         this.startDate = date;
-
       } else if (bookingType === 'multiple') {
         const s   = this._toStr(date);
         const idx = this.selectedDates.findIndex(d => this._toStr(d) === s);
-        idx >= 0 ? this.selectedDates.splice(idx, 1) : this.selectedDates.push(new Date(date));
-
-      } else { // range
+        if (idx >= 0) {
+          this.selectedDates.splice(idx, 1);
+        } else {
+          if (maxDays && this.selectedDates.length >= maxDays) return;
+          this.selectedDates.push(new Date(date));
+        }
+      } else {
         if (!this.startDate || (this.startDate && this.endDate)) {
           this.startDate = date; this.endDate = null; this.hoverDate = null;
         } else if (date <= this.startDate) {
           this.startDate = date; this.endDate = null; this.hoverDate = null;
         } else {
           const n = this._nights(this.startDate, date);
-          if (minNights && n < minNights) return;
-          if (maxNights && n > maxNights) return;
+          if (minDays && n < minDays) return;
+          if (maxDays && n > maxDays) return;
           this.endDate = date; this.hoverDate = null;
         }
       }
@@ -281,36 +304,46 @@
       return false;
     }
 
-    // ─── Render ───────────────────────────────────────────────────────────
+    // ─── Render ──────────────────────────────────────────────────────────────
 
     _render() {
-      const { bookingType, pricePerNight, minNights } = this.apartment;
-      const displayCal = this.shopSettings.displayCalendar || 'always_open';
-      const nights     = this._calcNights();
-      const total      = this._calcTotal();
-      const deposit    = this._calcDeposit(total);
-      const hasSel     = this._hasSelection();
+      try { this._renderInner(); } catch (err) {
+        console.error('[Rentfic] render error:', err);
+        this.container.innerHTML = `<div style="padding:16px;font-size:13px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">Widget render error: ${err.message}</div>`;
+      }
+    }
+
+    _renderInner() {
+      const { bookingType, pricePerNight, minDays, maxDays } = this.apartment;
+      const nights  = this._calcNights();
+      const total   = this._calcTotal();
+      const deposit = this._calcDeposit(total);
+      const hasSel  = this._hasSelection();
 
       let hint = '';
-      if      (bookingType === 'range' && !this.startDate)  hint = 'Select check-in date';
-      else if (bookingType === 'range' && !this.endDate)    hint = minNights > 1 ? `Select check-out (min ${minNights} nights)` : 'Select check-out date';
-      else if (bookingType === 'single' && !this.startDate) hint = 'Select a date';
-      else if (bookingType === 'multiple')                  hint = 'Select one or more dates';
+      if      (bookingType === 'range'    && !this.startDate) hint = 'Select check-in date';
+      else if (bookingType === 'range'    && !this.endDate)   hint = minDays > 1 ? `Select check-out (min ${minDays} nights)` : 'Select check-out date';
+      else if (bookingType === 'single'   && !this.startDate) hint = 'Select a date';
+      else if (bookingType === 'multiple') {
+        const parts = [];
+        if (minDays > 1) parts.push(`min ${minDays} dates`);
+        if (maxDays)     parts.push(`max ${maxDays} dates`);
+        hint = parts.length ? `Select dates · ${parts.join(', ')}` : 'Select one or more dates';
+      }
 
-      const showCalAlways = true;
+      const calDefault  = (this.shopSettings.displayCalendar || 'always_open') === 'default';
+      const showCal     = !calDefault || this.calOpen;
 
       this.container.innerHTML = `
         <div class="rentfic-widget" style="--rf-primary:${this.primaryColor}">
-          <div class="rentfic-header">
-            <span class="rentfic-price-amount">${this._fmtPrice(pricePerNight)}</span>
-            <span class="rentfic-price-per">&nbsp;/ night</span>
-          </div>
-          ${hint ? `<p class="rentfic-hint">${hint}</p>` : ''}
-          ${showCalAlways
-            ? this._renderCal()
-            : `<button class="rentfic-toggle-cal" id="rf-toggle">&#128197; ${this.startDate ? 'Change dates' : 'Select dates'}</button>
-               <div id="rf-cal-wrap" style="display:none">${this._renderCal()}</div>`
-          }
+          ${this._renderHeader(pricePerNight)}
+          ${this._renderInfoStrip()}
+          ${this._renderAmenities()}
+          ${calDefault ? `<button class="rentfic-toggle-cal" id="rf-toggle-cal">${this.calOpen ? '▲ Hide Calendar' : '▼ Show Calendar'}</button>` : ''}
+          ${hint && showCal ? `<p class="rentfic-hint">${hint}</p>` : ''}
+          ${showCal ? this._renderCal() : ''}
+          ${this._renderGuestSelector()}
+          ${this._renderQuantitySelector()}
           ${hasSel ? this._renderSummary(nights, total, deposit) : ''}
           ${hasSel ? `<button class="rentfic-reserve-btn" id="rf-reserve">${this.buttonText}</button>` : ''}
           <div id="rf-msg" class="rentfic-msg" style="display:none"></div>
@@ -318,13 +351,163 @@
       `;
 
       this._listen();
+
+      // Keep the theme's visible price in sync with the calculated total
+      if (this._hasSelection()) {
+        this._syncPagePrice(this._calcTotal());
+      } else {
+        this._syncPagePrice(this.apartment.pricePerNight || 0);
+      }
+    }
+
+    _renderHeader(pricePerNight) {
+      const hasSel = this._hasSelection();
+      const nights = this._calcNights();
+      const total  = this._calcTotal();
+      const fp     = this.shopSettings.fromPrice || 'automatic';
+
+      let priceHtml = '';
+      if (fp !== 'disabled') {
+        const showFrom = !hasSel && fp !== 'automatic';
+        const perLabel = fp === 'minimum_per_day' ? '/ day' : '/ night';
+        priceHtml = `
+          <div style="display:flex;align-items:baseline;gap:6px">
+            ${showFrom ? `<span class="rentfic-price-per">From</span>` : ''}
+            <span class="rentfic-price-amount">${this._fmtPrice(pricePerNight)}</span>
+            <span class="rentfic-price-per">${perLabel}</span>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="rentfic-header">
+          ${priceHtml}
+          ${hasSel && nights > 0 ? `
+            <div class="rf-total-pill">
+              Total: <strong>${this._fmtPrice(total)}</strong>
+              <span class="rf-total-nights">(${nights} night${nights !== 1 ? 's' : ''})</span>
+            </div>` : ''}
+        </div>
+      `;
+    }
+
+    // Update the Shopify theme's own price display to match the calculated total
+    _syncPagePrice(price) {
+      const selectors = [
+        '.price__regular .price-item--regular',
+        '.price-item.price-item--regular',
+        '[data-product-price]',
+        '.product__price .money',
+        '.product-single__price .money',
+        '.price .money',
+      ];
+      for (const sel of selectors) {
+        document.querySelectorAll(sel).forEach(el => {
+          el.textContent = this._fmtPrice(price);
+        });
+      }
+    }
+
+    _renderInfoStrip() {
+      const { bedrooms, bathrooms, maxGuests, checkInTime, checkOutTime, minDays, city, country } = this.apartment;
+      const items = [];
+      if (bedrooms)    items.push(`🛏 ${bedrooms} bed${bedrooms !== 1 ? 's' : ''}`);
+      if (bathrooms)   items.push(`🚿 ${bathrooms} bath${bathrooms !== 1 ? 's' : ''}`);
+      if (maxGuests)   items.push(`👥 Max ${maxGuests} guests`);
+      if (checkInTime)  items.push(`🔑 Check-in ${this._fmtTime(checkInTime)}`);
+      if (checkOutTime) items.push(`🚪 Check-out ${this._fmtTime(checkOutTime)}`);
+      if (minDays > 1) items.push(this.apartment.bookingType === 'multiple' ? `📅 Min ${minDays} dates` : `🌙 Min ${minDays} nights`);
+      if (city || country) items.push(`📍 ${[city, country].filter(Boolean).join(', ')}`);
+      if (!items.length) return '';
+      return `
+        <div class="rf-info-strip">
+          ${items.map(i => `<span class="rf-info-item">${i}</span>`).join('')}
+        </div>
+      `;
+    }
+
+    _renderAmenities() {
+      const list = this.apartment.amenities || [];
+      if (!list.length) return '';
+      const shown = list.slice(0, 8);
+      const more  = list.length - shown.length;
+      return `
+        <div class="rf-amenities">
+          ${shown.map(a => `<span class="rf-amenity-tag">${a}</span>`).join('')}
+          ${more > 0 ? `<span class="rf-amenity-more">+${more} more</span>` : ''}
+        </div>
+      `;
+    }
+
+    _renderGuestSelector() {
+      const { maxAdults, maxChildren, maxInfants, maxGuests } = this.apartment;
+      const totalG = this._totalGuests();
+
+      const rows = [
+        { key: 'adults',   label: 'Adults',   sub: 'Ages 13+',  min: 1, max: maxAdults },
+        { key: 'children', label: 'Children', sub: 'Ages 2–12', min: 0, max: maxChildren },
+        { key: 'infants',  label: 'Infants',  sub: 'Under 2',   min: 0, max: maxInfants },
+      ];
+
+      return `
+        <div class="rf-guest-section">
+          <div class="rf-section-title">Guests</div>
+          ${rows.map(row => {
+            const val   = this.guests[row.key];
+            const atMin = val <= row.min;
+            const atMax = (row.max != null && val >= row.max) || (maxGuests != null && totalG >= maxGuests && row.key !== 'adults');
+            return `
+              <div class="rf-guest-row">
+                <div class="rf-guest-label">
+                  <span class="rf-guest-name">${row.label}</span>
+                  <span class="rf-guest-sub">${row.sub}${row.max ? ` · max ${row.max}` : ''}</span>
+                </div>
+                <div class="rf-stepper">
+                  <button class="rf-step-btn" data-guest="${row.key}" data-dir="-1" ${atMin ? 'disabled' : ''}>−</button>
+                  <span class="rf-step-val">${val}</span>
+                  <button class="rf-step-btn" data-guest="${row.key}" data-dir="1" ${atMax ? 'disabled' : ''}>+</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+          ${maxGuests ? `<div class="rf-guest-max-hint">${totalG} of ${maxGuests} max guests selected</div>` : ''}
+        </div>
+      `;
+    }
+
+    _renderQuantitySelector() {
+      const { quantityEnabled, stockQuantity } = this.apartment;
+      const position = this.shopSettings.quantityPosition || 'product_and_calendar';
+      if (!quantityEnabled || position === 'product_page') return '';
+
+      const maxQty = stockQuantity ? parseInt(stockQuantity) : 99;
+      const atMin  = this.quantity <= 1;
+      const atMax  = this.quantity >= maxQty;
+
+      return `
+        <div class="rf-qty-section">
+          <div class="rf-section-title">Quantity</div>
+          <div class="rf-qty-row">
+            <div class="rf-guest-label">
+              <span class="rf-guest-name">Units</span>
+              <span class="rf-guest-sub">Number of units to book${stockQuantity ? ` · max ${maxQty}` : ''}</span>
+            </div>
+            <div class="rf-stepper">
+              <button class="rf-step-btn" data-qty="-1" ${atMin ? 'disabled' : ''}>−</button>
+              <span class="rf-step-val">${this.quantity}</span>
+              <button class="rf-step-btn" data-qty="1" ${atMax ? 'disabled' : ''}>+</button>
+            </div>
+          </div>
+          ${stockQuantity ? `<div class="rf-guest-max-hint">${maxQty - this.quantity} of ${maxQty} units still available</div>` : ''}
+        </div>
+      `;
     }
 
     _renderCal() {
-      const y       = this.viewYear;
-      const m       = this.viewMonth;
-      const first   = new Date(y, m, 1).getDay();
-      const days    = new Date(y, m + 1, 0).getDate();
+      const y     = this.viewYear;
+      const m     = this.viewMonth;
+      const first = new Date(y, m, 1).getDay();
+      const days  = new Date(y, m + 1, 0).getDate();
 
       let html = `
         <div class="rentfic-calendar">
@@ -361,30 +544,73 @@
     }
 
     _renderSummary(nights, total, deposit) {
-      const { bookingType } = this.apartment;
+      const { bookingType, pricePerNight, payNowEnabled, payNowPercent } = this.apartment;
+      const base   = this.quantity * nights * (pricePerNight || 0);
+      const fees   = this._calcFees(nights);
+      const disc   = this._calcDiscount(base, nights);
+
       let dateLabel = '';
       if      (bookingType === 'range'    && this.startDate && this.endDate) dateLabel = `${this._toStr(this.startDate)} &rarr; ${this._toStr(this.endDate)}`;
       else if (bookingType === 'single'   && this.startDate)                 dateLabel = this._toStr(this.startDate);
       else if (bookingType === 'multiple')                                   dateLabel = `${nights} date${nights !== 1 ? 's' : ''} selected`;
 
+      const payNow = (payNowEnabled && payNowPercent && payNowPercent < 100)
+        ? total * (payNowPercent / 100) : null;
+
       return `
         <div class="rentfic-summary">
+          <div class="rf-section-title" style="margin-bottom:10px">Price breakdown</div>
+          ${dateLabel ? `<div class="rf-sum-row rf-sum-dates"><span>${dateLabel}</span></div>` : ''}
           <div class="rf-sum-row">
-            <span>${dateLabel}</span>
-            <span>${nights} night${nights !== 1 ? 's' : ''} &times; ${this._fmtPrice(this.apartment.pricePerNight)}</span>
+            <span>
+              ${this.quantity > 1 ? `${this.quantity} units × ` : ''}${nights} night${nights !== 1 ? 's' : ''} × ${this._fmtPrice(pricePerNight)}
+            </span>
+            <span>${this._fmtPrice(base)}</span>
           </div>
+          ${fees.map(fee => `
+            <div class="rf-sum-row rf-fee-row">
+              <span>${fee.name}${fee.applyPer === 'night' ? ' <em>(per night)</em>' : ''}</span>
+              <span>${this._fmtPrice(fee.computed)}</span>
+            </div>
+          `).join('')}
+          ${disc > 0 ? `
+            <div class="rf-sum-row rf-discount-row">
+              <span>Discount applied</span>
+              <span>−${this._fmtPrice(disc)}</span>
+            </div>
+          ` : ''}
           <div class="rf-sum-row rf-total">
             <strong>Total</strong><strong>${this._fmtPrice(total)}</strong>
           </div>
-          ${deposit !== null ? `<div class="rf-sum-row rf-deposit"><span>Deposit due now</span><span>${this._fmtPrice(deposit)}</span></div>` : ''}
+          ${deposit !== null ? `
+            <div class="rf-sum-row rf-deposit">
+              <span>Deposit due now</span>
+              <span>${this._fmtPrice(deposit)}</span>
+            </div>
+          ` : ''}
+          ${payNow !== null ? `
+            <div class="rf-sum-row rf-deposit">
+              <span>Pay now (${payNowPercent}%)</span>
+              <span>${this._fmtPrice(payNow)}</span>
+            </div>
+          ` : ''}
         </div>
       `;
     }
 
-    // ─── Events ───────────────────────────────────────────────────────────
+    // ─── Events ──────────────────────────────────────────────────────────────
 
     _listen() {
-      // Nav buttons
+      // Toggle calendar (displayCalendar: default)
+      const toggleCalBtn = this.container.querySelector('#rf-toggle-cal');
+      if (toggleCalBtn) {
+        toggleCalBtn.addEventListener('click', () => {
+          this.calOpen = !this.calOpen;
+          this._render();
+        });
+      }
+
+      // Calendar nav
       this.container.querySelectorAll('.rf-nav').forEach(btn => {
         btn.addEventListener('click', () => {
           if (btn.dataset.dir === 'prev') {
@@ -407,18 +633,44 @@
             this.hoverDate = this._parse(cell.dataset.date);
             this.container.querySelectorAll('.rf-cell[data-date]').forEach(c => {
               const d = this._parse(c.dataset.date);
-              c.classList.toggle('in-range',   this._isInRange(d));
-              c.classList.toggle('range-end',  this._isRangeEdge(d, 'end'));
+              c.classList.toggle('in-range',  this._isInRange(d));
+              c.classList.toggle('range-end', this._isRangeEdge(d, 'end'));
             });
           });
         }
       });
 
-      // Toggle calendar
-      const toggle = this.container.querySelector('#rf-toggle');
-      if (toggle) toggle.addEventListener('click', () => {
-        const wrap = this.container.querySelector('#rf-cal-wrap');
-        if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+      // Guest steppers
+      this.container.querySelectorAll('.rf-step-btn[data-guest]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.guest;
+          const dir = parseInt(btn.dataset.dir);
+          const { maxAdults, maxChildren, maxInfants, maxGuests } = this.apartment;
+          const limits = {
+            adults:   { min: 1, max: maxAdults   || 99 },
+            children: { min: 0, max: maxChildren  || 99 },
+            infants:  { min: 0, max: maxInfants   || 99 },
+          };
+          const cur  = this.guests[key];
+          const next = cur + dir;
+          if (next < limits[key].min) return;
+          if (next > limits[key].max) return;
+          if (dir > 0 && maxGuests && this._totalGuests() >= maxGuests) return;
+          this.guests[key] = next;
+          this._render();
+        });
+      });
+
+      // Quantity stepper
+      this.container.querySelectorAll('.rf-step-btn[data-qty]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const dir    = parseInt(btn.dataset.qty);
+          const maxQty = this.apartment.stockQuantity ? parseInt(this.apartment.stockQuantity) : 99;
+          const next   = this.quantity + dir;
+          if (next < 1 || next > maxQty) return;
+          this.quantity = next;
+          this._render();
+        });
       });
 
       // Reserve button
@@ -426,14 +678,28 @@
       if (btn) btn.addEventListener('click', () => this._reserve());
     }
 
-    // ─── Reserve ──────────────────────────────────────────────────────────
+    // ─── Reserve ─────────────────────────────────────────────────────────────
 
     async _reserve() {
       const btn = this.container.querySelector('#rf-reserve');
       if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
 
-      const { bookingType } = this.apartment;
+      const { bookingType, minDays, maxDays } = this.apartment;
       const nights = this._calcNights();
+
+      // Validate min/max for multiple type
+      if (bookingType === 'multiple') {
+        if (minDays && nights < minDays) {
+          this._msg(`Please select at least ${minDays} dates.`, 'warning');
+          if (btn) { btn.disabled = false; btn.textContent = this.buttonText; }
+          return;
+        }
+        if (maxDays && nights > maxDays) {
+          this._msg(`Please select no more than ${maxDays} dates.`, 'warning');
+          if (btn) { btn.disabled = false; btn.textContent = this.buttonText; }
+          return;
+        }
+      }
       const total  = this._calcTotal();
       let startDate, endDate, bookingDates;
 
@@ -450,11 +716,16 @@
       }
 
       try {
-        // 1. Save booking record
+        // 1. Create booking — server recalculates total and updates variant price
         const bRes  = await fetch('/apps/rentfic/booking', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apartmentId: this.apartment.id, startDate, endDate, nights, total, bookingType, bookingDates }),
+          body: JSON.stringify({
+            apartmentId: this.apartment.id,
+            startDate, endDate, nights, bookingType, bookingDates,
+            guests:    this.guests,
+            quantity:  this.quantity,
+          }),
         });
         const bData = await bRes.json();
 
@@ -464,7 +735,6 @@
           return;
         }
 
-        // 2. Add to Shopify cart with booking details as line item properties
         const variantId = this._getVariant();
         if (!variantId) {
           this._msg('Could not find product variant. Please refresh.', 'error');
@@ -473,13 +743,20 @@
         }
 
         const properties = {
-          'Check-in':    startDate,
-          'Check-out':   endDate,
-          'Nights':      String(nights),
-          '_booking_id': bData.bookingId,
+          'Check-in':     startDate,
+          'Check-out':    endDate,
+          'Nights':       String(nights),
+          'Units':        String(this.quantity),
+          'Adults':       String(this.guests.adults),
+          'Children':     String(this.guests.children),
+          'Infants':      String(this.guests.infants),
+          'Total Guests': String(this._totalGuests()),
+          'Total Price':  this._fmtPrice(bData.finalTotal),
+          '_booking_id':  bData.bookingId,
         };
         if (bookingDates) properties['Dates'] = bookingDates.join(', ');
 
+        // 2. Add to cart — variant price has been set to finalTotal by the server
         const cartRes = await fetch('/cart/add.js', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -491,8 +768,24 @@
           return;
         }
 
-        // 3. Always redirect to checkout
-        window.location.href = '/checkout';
+        // 3. Reset variant price back to pricePerNight (fire-and-forget)
+        fetch('/apps/rentfic/price-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: this.productId, price: bData.resetPrice }),
+        }).catch(() => {});
+
+        // 4. Redirect based on shop setting
+        const redirect = this.shopSettings.redirectAfterCart || 'automatic';
+        if (redirect === 'redirect_to_cart') {
+          window.location.href = '/cart';
+        } else if (redirect === 'disabled') {
+          if (btn) { btn.disabled = false; btn.textContent = this.buttonText; }
+          this._msg('Booking confirmed! Your reservation has been added to the cart.', 'success');
+        } else {
+          // 'automatic' or 'redirect_to_checkout'
+          window.location.href = '/checkout';
+        }
 
       } catch (_) {
         this._msg('An error occurred. Please try again.', 'error');
@@ -515,7 +808,6 @@
   }
 
   // ─── Boot ─────────────────────────────────────────────────────────────────
-
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 

@@ -3,6 +3,7 @@ import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { PlanCard } from "../components/PlanCard";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -111,6 +112,7 @@ export default function SettingsPage() {
       <s-button slot="primary-action" onClick={handleSave} loading={isSaving}>
         Save
       </s-button>
+      <PlanCard />
 
       {/* General */}
       <s-section heading="General">

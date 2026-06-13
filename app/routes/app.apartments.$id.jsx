@@ -10,13 +10,16 @@ import { redirect } from "react-router";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getPlanLimits } from "../plans.server";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const AMENITIES = [
-  "WiFi", "Air Conditioning", "Heating", "Kitchen",
-  "Washing Machine", "TV", "Free Parking", "Pool",
-  "Gym", "Elevator", "Balcony", "Sea View", "Pet Friendly", "Smoking Allowed",
+const AMENITY_SUGGESTIONS = [
+  "WiFi", "Air Conditioning", "Heating", "Kitchen", "Washing Machine", "Dryer",
+  "TV", "Netflix", "Free Parking", "EV Charging", "Pool", "Hot Tub", "Gym",
+  "Elevator", "Balcony", "Terrace", "Garden", "BBQ Grill", "Sea View",
+  "Mountain View", "City View", "Pet Friendly", "Smoking Allowed",
+  "Wheelchair Accessible", "24/7 Check-in", "Concierge", "Breakfast Included",
 ];
 
 const DAYS = [
@@ -39,27 +42,79 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
-  if (params.id === "new") return { apartment: null };
+  const shop = session.shop;
+
+  if (params.id === "new") {
+    const shopRecord = await prisma.shop.findUnique({ where: { shop } });
+    const limits     = getPlanLimits(shopRecord?.plan);
+    const count      = await prisma.apartment.count({ where: { shop } });
+    if (count >= limits.apartments) {
+      return {
+        apartment:   null,
+        limitReached: true,
+        currentCount: count,
+        planLimit:    limits.apartments,
+      };
+    }
+    return { apartment: null, limitReached: false };
+  }
+
   const apartment = await prisma.apartment.findFirst({
-    where: { id: params.id, shop: session.shop },
+    where: { id: params.id, shop },
   });
   if (!apartment) throw new Response("Not Found", { status: 404 });
-  return { apartment };
+  return { apartment, limitReached: false };
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
 
-async function setRentficMetafield(admin, productId, value) {
+async function syncVariantPrice(admin, productId, price) {
+  if (!price) return;
+  const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
+
+  const res = await admin.graphql(
+    `#graphql
+    query GetFirstVariant($id: ID!) {
+      product(id: $id) { variants(first: 1) { edges { node { id } } } }
+    }`,
+    { variables: { id: gid } }
+  );
+  const json = await res.json();
+  const variantId = json?.data?.product?.variants?.edges?.[0]?.node?.id;
+  if (!variantId) return;
+
+  await admin.graphql(
+    `#graphql
+    mutation BulkUpdatePrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+        productVariants { id price }
+        userErrors { field message }
+      }
+    }`,
+    {
+      variables: {
+        productId: gid,
+        variants: [{ id: variantId, price: price.toFixed(2) }],
+      },
+    }
+  );
+}
+
+async function setRentficMetafields(admin, productId, settings = {}) {
+  const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
   await admin.graphql(
     `#graphql
     mutation productUpdate($input: ProductInput!) {
-      productUpdate(input: $input) { product { id } }
+      productUpdate(input: $input) { product { id } userErrors { field message } }
     }`,
     {
       variables: {
         input: {
-          id: productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`,
-          metafields: [{ namespace: "rentfic", key: "is_apartment", value, type: "single_line_text_field" }],
+          id: gid,
+          metafields: [
+            { namespace: "rentfic", key: "is_apartment", value: "true", type: "single_line_text_field" },
+            { namespace: "rentfic", key: "additional_fees", value: JSON.stringify(settings.additionalFees ?? []), type: "json" },
+          ],
         },
       },
     }
@@ -90,8 +145,11 @@ export const action = async ({ request, params }) => {
     calendarEndDate: fd.get("calendarEndDate") || null,
     checkInTime: fd.get("checkInTime") || null,
     checkOutTime: fd.get("checkOutTime") || null,
-    minNights: fd.get("minNights") ? parseInt(fd.get("minNights")) : 1,
-    maxNights: fd.get("maxNights") ? parseInt(fd.get("maxNights")) : null,
+    minDays: fd.get("minDays") ? parseInt(fd.get("minDays")) : 1,
+    maxDays: fd.get("maxDays") ? parseInt(fd.get("maxDays")) : null,
+    maxAdults: fd.get("maxAdults") ? parseInt(fd.get("maxAdults")) : null,
+    maxChildren: fd.get("maxChildren") ? parseInt(fd.get("maxChildren")) : null,
+    maxInfants: fd.get("maxInfants") ? parseInt(fd.get("maxInfants")) : null,
     quantityEnabled: fd.get("quantityEnabled") === "true",
     weeklyAvailability: JSON.parse(fd.get("weeklyAvailability") || "null"),
     // block dates
@@ -107,6 +165,8 @@ export const action = async ({ request, params }) => {
     country: fd.get("country") || null,
     // amenities
     amenities: fd.getAll("amenities"),
+    // additional fees
+    additionalFees: JSON.parse(fd.get("additionalFees") || "[]"),
     // discounts
     discountedDates: JSON.parse(fd.get("discountedDates") || "[]"),
     conditionalDiscounts: JSON.parse(fd.get("conditionalDiscounts") || "[]"),
@@ -121,7 +181,8 @@ export const action = async ({ request, params }) => {
 
   if (params.id === "new") {
     const created = await prisma.apartment.create({ data: { ...core, settings } });
-    await setRentficMetafield(admin, core.productId, "true");
+    await syncVariantPrice(admin, core.productId, pricePerNight);
+    await setRentficMetafields(admin, core.productId, settings);
     return redirect(`/app/apartments/${created.id}?saved=1`);
   }
   const { shop, ...updateCore } = core;
@@ -129,7 +190,8 @@ export const action = async ({ request, params }) => {
     where: { id: params.id },
     data: { ...updateCore, settings },
   });
-  await setRentficMetafield(admin, core.productId, "true");
+  await syncVariantPrice(admin, core.productId, pricePerNight);
+  await setRentficMetafields(admin, core.productId, settings);
   return { success: true };
 };
 
@@ -192,7 +254,7 @@ function ToggleRow({ label, hint, enabled, onChange }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function ApartmentEditPage() {
-  const { apartment } = useLoaderData();
+  const { apartment, limitReached, currentCount, planLimit } = useLoaderData();
   const actionData = useActionData();
   const [searchParams] = useSearchParams();
   const submit = useSubmit();
@@ -221,9 +283,12 @@ export default function ApartmentEditPage() {
       calendarEndDate: s.calendarEndDate ?? "",
       checkInTime: s.checkInTime ?? "14:00",
       checkOutTime: s.checkOutTime ?? "11:00",
-      minNights: s.minNights?.toString() ?? "1",
-      maxNights: s.maxNights?.toString() ?? "",
-      quantityEnabled: s.quantityEnabled ?? false,
+      minDays: s.minDays?.toString() ?? "1",
+      maxDays: s.maxDays?.toString() ?? "",
+      maxAdults: s.maxAdults?.toString() ?? "",
+    maxChildren: s.maxChildren?.toString() ?? "",
+    maxInfants: s.maxInfants?.toString() ?? "",
+    quantityEnabled: s.quantityEnabled ?? false,
       weeklyAvailability: s.weeklyAvailability ?? DEFAULT_WEEKLY,
       blockedDates: s.blockedDates ?? [],
       bedrooms: s.bedrooms?.toString() ?? "",
@@ -234,6 +299,7 @@ export default function ApartmentEditPage() {
       city: s.city ?? "",
       country: s.country ?? "",
       amenities: s.amenities ?? [],
+      additionalFees: s.additionalFees ?? [],
       discountedDates: s.discountedDates ?? [],
       conditionalDiscounts: s.conditionalDiscounts ?? [],
       payNowEnabled: s.payNowEnabled ?? false,
@@ -254,8 +320,11 @@ export default function ApartmentEditPage() {
   const [calendarEndDate, setCalendarEndDate] = useState(o.calendarEndDate);
   const [checkInTime, setCheckInTime] = useState(o.checkInTime);
   const [checkOutTime, setCheckOutTime] = useState(o.checkOutTime);
-  const [minNights, setMinNights] = useState(o.minNights);
-  const [maxNights, setMaxNights] = useState(o.maxNights);
+  const [minDays, setMinNights] = useState(o.minDays);
+  const [maxDays, setMaxNights] = useState(o.maxDays);
+  const [maxAdults, setMaxAdults] = useState(o.maxAdults);
+  const [maxChildren, setMaxChildren] = useState(o.maxChildren);
+  const [maxInfants, setMaxInfants] = useState(o.maxInfants);
   const [quantityEnabled, setQuantityEnabled] = useState(o.quantityEnabled);
   const [weeklyAvailability, setWeeklyAvailability] = useState(o.weeklyAvailability);
   const [blockedDates, setBlockedDates] = useState(o.blockedDates);
@@ -267,6 +336,7 @@ export default function ApartmentEditPage() {
   const [city, setCity] = useState(o.city);
   const [country, setCountry] = useState(o.country);
   const [amenities, setAmenities] = useState(o.amenities);
+  const [additionalFees, setAdditionalFees] = useState(o.additionalFees);
   const [discountedDates, setDiscountedDates] = useState(o.discountedDates);
   const [conditionalDiscounts, setConditionalDiscounts] = useState(o.conditionalDiscounts);
   const [payNowEnabled, setPayNowEnabled] = useState(o.payNowEnabled);
@@ -276,6 +346,7 @@ export default function ApartmentEditPage() {
   const [depositAmount, setDepositAmount] = useState(o.depositAmount);
   const [isDirty, setIsDirty] = useState(false);
 
+  const [amenityInput, setAmenityInput] = useState("");
   const [blockDateInput, setBlockDateInput] = useState("");
   const [editingDiscount, setEditingDiscount] = useState(null);
   const [discountDateInput, setDiscountDateInput] = useState("");
@@ -305,13 +376,14 @@ export default function ApartmentEditPage() {
     setName(o.name); setStatus(o.status); setPricePerNight(o.pricePerNight);
     setDescription(o.description); setBookingType(o.bookingType);
     setCalendarStartDate(o.calendarStartDate); setCalendarEndDate(o.calendarEndDate);
+    setMaxAdults(o.maxAdults); setMaxChildren(o.maxChildren); setMaxInfants(o.maxInfants);
     setCheckInTime(o.checkInTime); setCheckOutTime(o.checkOutTime);
-    setMinNights(o.minNights); setMaxNights(o.maxNights);
+    setMinNights(o.minDays); setMaxNights(o.maxDays);
     setQuantityEnabled(o.quantityEnabled); setWeeklyAvailability(o.weeklyAvailability);
     setBlockedDates(o.blockedDates); setBedrooms(o.bedrooms); setBathrooms(o.bathrooms);
     setMaxGuests(o.maxGuests); setStockQuantity(o.stockQuantity);
     setAddress(o.address); setCity(o.city); setCountry(o.country);
-    setAmenities(o.amenities); setDiscountedDates(o.discountedDates);
+    setAmenities(o.amenities); setAdditionalFees(o.additionalFees); setDiscountedDates(o.discountedDates);
     setConditionalDiscounts(o.conditionalDiscounts); setPayNowEnabled(o.payNowEnabled);
     setPayNowPercent(o.payNowPercent); setDepositEnabled(o.depositEnabled);
     setDepositType(o.depositType); setDepositAmount(o.depositAmount);
@@ -333,12 +405,15 @@ export default function ApartmentEditPage() {
     // settings fields
     fd.append("description", description);
     fd.append("bookingType", bookingType);
+    fd.append("maxAdults", maxAdults);
+    fd.append("maxChildren", maxChildren);
+    fd.append("maxInfants", maxInfants);
     fd.append("calendarStartDate", calendarStartDate);
     fd.append("calendarEndDate", calendarEndDate);
     fd.append("checkInTime", checkInTime);
     fd.append("checkOutTime", checkOutTime);
-    fd.append("minNights", minNights);
-    fd.append("maxNights", maxNights);
+    fd.append("minDays", minDays);
+    fd.append("maxDays", maxDays);
     fd.append("quantityEnabled", String(quantityEnabled));
     fd.append("weeklyAvailability", JSON.stringify(weeklyAvailability));
     fd.append("blockedDates", JSON.stringify(blockedDates));
@@ -350,6 +425,7 @@ export default function ApartmentEditPage() {
     fd.append("city", city);
     fd.append("country", country);
     amenities.forEach((a) => fd.append("amenities", a));
+    fd.append("additionalFees", JSON.stringify(additionalFees));
     fd.append("discountedDates", JSON.stringify(discountedDates));
     fd.append("conditionalDiscounts", JSON.stringify(conditionalDiscounts));
     fd.append("payNowEnabled", String(payNowEnabled));
@@ -390,7 +466,7 @@ export default function ApartmentEditPage() {
   const addRule = () => {
     setConditionalDiscounts((p) => [
       ...p,
-      { id: uid(), condition: "minNights", conditionValue: "1", discountType: "percent", discountValue: "", applyMode: "once" },
+      { id: uid(), condition: "minDays", conditionValue: "1", discountType: "percent", discountValue: "", applyMode: "once" },
     ]);
     setIsDirty(true);
   };
@@ -411,6 +487,57 @@ export default function ApartmentEditPage() {
     const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     return `${months[parseInt(m) - 1]} ${parseInt(day)}, ${y}`;
   };
+
+  if (limitReached) {
+    return (
+      <s-page heading="Create Apartment">
+        <s-section>
+          <div style={{ padding: "24px 20px", background: "#fff4f4", border: "1px solid #fead9a", borderRadius: 8 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#202223", marginBottom: 8 }}>
+              Apartment limit reached
+            </div>
+            <div style={{ fontSize: 14, color: "#6d7175", lineHeight: 1.6, marginBottom: 16 }}>
+              You are using {currentCount} of {planLimit} apartment{planLimit !== 1 ? "s" : ""} allowed on the Free plan.
+              Upgrade to Pro or Business to add unlimited apartments.
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <a
+                href="/app/subscribtion"
+                style={{
+                  display: "inline-block",
+                  padding: "9px 20px",
+                  background: "#008060",
+                  color: "#fff",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                Upgrade Plan
+              </a>
+              <a
+                href="/app/apartments"
+                style={{
+                  display: "inline-block",
+                  padding: "9px 20px",
+                  background: "#f6f6f7",
+                  color: "#202223",
+                  border: "1px solid #e1e3e5",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                Back to Apartments
+              </a>
+            </div>
+          </div>
+        </s-section>
+      </s-page>
+    );
+  }
 
   return (
     <>
@@ -477,6 +604,15 @@ export default function ApartmentEditPage() {
               <textarea value={description} onChange={mark(setDescription)} placeholder="Describe the apartment..." rows={3}
                 style={{ ...inputStyle, resize:"vertical" }} />
             </Field>
+            <Field label="Maximum Adults ⓘ">
+              <Inp type="number" min={0} value={maxAdults} onChange={mark(setMaxAdults)} placeholder="e.g. 5" />
+            </Field>
+            <Field label="Maximum Children ⓘ">
+              <Inp type="number" min={0} value={maxChildren} onChange={mark(setMaxChildren)} placeholder="e.g. 5" />
+            </Field>
+            <Field label="Maximum Infants ⓘ">
+              <Inp type="number" min={0} value={maxInfants} onChange={mark(setMaxInfants)} placeholder="e.g. 5" />
+            </Field>
           </div>
         </s-section>
 
@@ -520,12 +656,20 @@ export default function ApartmentEditPage() {
             <Field label="Check-out Time">
               <Inp type="time" value={checkOutTime} onChange={mark(setCheckOutTime)} />
             </Field>
-            <Field label="Min Nights">
-              <Inp type="number" min={1} value={minNights} onChange={mark(setMinNights)} placeholder="1" />
-            </Field>
-            <Field label="Max Nights">
-              <Inp type="number" min={1} value={maxNights} onChange={mark(setMaxNights)} placeholder="No limit" />
-            </Field>
+            {(bookingType === "range" || bookingType === "multiple") && (<>
+              <Field
+                label={"Min Days"}
+                hint={"Minimum dates customer must select"}
+              >
+                <Inp type="number" min={1} value={minDays} onChange={mark(setMinNights)} placeholder="1" />
+              </Field>
+              <Field
+                label={"Max Days"}
+                hint={"Maximum dates customer can select"}
+              >
+                <Inp type="number" min={1} value={maxDays} onChange={mark(setMaxNights)} placeholder="No limit" />
+              </Field>
+            </>)}
           </div>
 
           <ToggleRow
@@ -551,13 +695,6 @@ export default function ApartmentEditPage() {
                     <span style={{ fontSize:12, fontWeight:700, width:28, color: day.enabled ? "#008060" : "#adb5bd" }}>
                       {day.enabled ? "ON" : "OFF"}
                     </span>
-                    <input type="time" value={day.open} disabled={!day.enabled}
-                      onChange={(e) => updateDay(key, "open", e.target.value)}
-                      style={{ ...inputStyle, width:120, opacity: day.enabled ? 1 : 0.4 }} />
-                    <span style={{ fontSize:13, color:"#6d7175" }}>to</span>
-                    <input type="time" value={day.close} disabled={!day.enabled}
-                      onChange={(e) => updateDay(key, "close", e.target.value)}
-                      style={{ ...inputStyle, width:120, opacity: day.enabled ? 1 : 0.4 }} />
                   </div>
                 );
               })}
@@ -608,13 +745,81 @@ export default function ApartmentEditPage() {
 
         {/* ══════════════ PRICE ══════════════ */}
         <s-section heading="Price">
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:24 }}>
             <Field label="Price per Night ($)">
               <div style={{ position:"relative" }}>
                 <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"#6d7175", fontSize:14 }}>$</span>
                 <Inp type="number" min={0} step="0.01" value={pricePerNight} onChange={mark(setPricePerNight)} placeholder="0.00" style={{ paddingLeft:26 }} />
               </div>
             </Field>
+          </div>
+
+          {/* Additional Fees */}
+          <div style={{ borderTop:"1px solid #f1f2f3", paddingTop:20 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:"#202223", marginBottom:4 }}>Additional Fees</div>
+            <p style={{ margin:"0 0 14px", fontSize:13, color:"#6d7175" }}>
+              Charges added on top of the nightly rate (e.g. cleaning fee, service fee).
+            </p>
+
+            {additionalFees.length > 0 && (
+              <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:14 }}>
+                {additionalFees.map((fee) => (
+                  <div key={fee.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"1px solid #e1e3e5", borderRadius:8, background:"#fff" }}>
+                    <div style={{ flex:1, fontSize:14, fontWeight:500, color:"#202223" }}>{fee.name}</div>
+                    <span style={discountBadge(fee.type)}>
+                      {fee.type === "percent" ? `${fee.amount}%` : `$${fee.amount}`}
+                    </span>
+                    <span style={{ fontSize:12, color:"#6d7175", background:"#f1f2f3", padding:"2px 8px", borderRadius:10 }}>
+                      {fee.applyPer === "booking" ? "per booking" : "per night"}
+                    </span>
+                    <button type="button"
+                      onClick={() => { setAdditionalFees((p) => p.filter((f) => f.id !== fee.id)); setIsDirty(true); }}
+                      style={deleteBtn}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ ...editCardStyle, display:"flex", flexDirection:"column", gap:12 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", gap:12, alignItems:"end" }}>
+                <Field label="Fee Name">
+                  <Inp type="text" placeholder="e.g. Cleaning Fee"
+                    id="fee-name-input" />
+                </Field>
+                <Field label="Type">
+                  <select id="fee-type-input" style={inputStyle}>
+                    <option value="flat">Flat ($)</option>
+                    <option value="percent">Percent (%)</option>
+                  </select>
+                </Field>
+                <Field label="Amount">
+                  <Inp type="number" min={0} step="0.01" placeholder="0.00"
+                    id="fee-amount-input" />
+                </Field>
+                <Field label="Apply Per">
+                  <select id="fee-per-input" style={inputStyle}>
+                    <option value="booking">Per Booking</option>
+                    <option value="night">Per Night</option>
+                  </select>
+                </Field>
+              </div>
+              <div style={{ display:"flex", justifyContent:"flex-end" }}>
+                <button type="button" style={primaryBtn}
+                  onClick={() => {
+                    const name = document.getElementById("fee-name-input").value.trim();
+                    const type = document.getElementById("fee-type-input").value;
+                    const amount = document.getElementById("fee-amount-input").value;
+                    const applyPer = document.getElementById("fee-per-input").value;
+                    if (!name || !amount) return;
+                    setAdditionalFees((p) => [...p, { id: uid(), name, type, amount, applyPer }]);
+                    setIsDirty(true);
+                    document.getElementById("fee-name-input").value = "";
+                    document.getElementById("fee-amount-input").value = "";
+                  }}>
+                  + Add Fee
+                </button>
+              </div>
+            </div>
           </div>
         </s-section>
 
@@ -716,12 +921,12 @@ export default function ApartmentEditPage() {
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:12, marginBottom:12 }}>
                     <Field label="Based On">
                       <Sel value={rule.condition} onChange={(e) => updateRule(rule.id, "condition", e.target.value)}>
-                        <option value="minNights">Min Nights</option>
+                        <option value="minDays">Min Nights</option>
                         <option value="minQty">Min Quantity</option>
                         <option value="minTotal">Min Total ($)</option>
                       </Sel>
                     </Field>
-                    <Field label={rule.condition === "minNights" ? "Min Nights" : rule.condition === "minQty" ? "Min Qty" : "Min Total ($)"}>
+                    <Field label={rule.condition === "minDays" ? "Min Nights" : rule.condition === "minQty" ? "Min Qty" : "Min Total ($)"}>
                       <Inp type="number" min={0} step={rule.condition === "minTotal" ? "0.01" : "1"}
                         value={rule.conditionValue}
                         onChange={(e) => updateRule(rule.id, "conditionValue", e.target.value)}
@@ -813,25 +1018,64 @@ export default function ApartmentEditPage() {
           )}
         </s-section>
 
-        {/* ══════════════ AMENITIES ══════════════ */}
-        <s-section heading="Amenities">
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px,1fr))", gap:10 }}>
-            {AMENITIES.map((item) => {
-              const on = amenities.includes(item);
-              return (
-                <label key={item} style={{
-                  display:"flex", alignItems:"center", gap:8, cursor:"pointer",
-                  fontSize:14, padding:"8px 12px",
-                  border:`1px solid ${on ? "#008060" : "#e1e3e5"}`,
-                  borderRadius:8, background: on ? "#f0faf6" : "#fff", userSelect:"none",
-                }}>
-                  <input type="checkbox" checked={on}
-                    onChange={() => { setAmenities((p) => p.includes(item) ? p.filter((a) => a !== item) : [...p, item]); setIsDirty(true); }}
-                    style={{ accentColor:"#008060" }} />
+        {/* ══════════════ FEATURES & AMENITIES ══════════════ */}
+        <s-section heading="Features & Amenities">
+          {/* Selected amenities */}
+          {amenities.length > 0 && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+              {amenities.map((item) => (
+                <span key={item} style={{ ...tagStyle, background:"#f0faf6", border:"1px solid #008060", color:"#008060" }}>
                   {item}
-                </label>
-              );
-            })}
+                  <button type="button"
+                    onClick={() => { setAmenities((p) => p.filter((a) => a !== item)); setIsDirty(true); }}
+                    style={{ ...tagX, color:"#008060" }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Custom input */}
+          <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+            <Inp
+              type="text"
+              value={amenityInput}
+              onChange={(e) => setAmenityInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const val = amenityInput.trim();
+                  if (val && !amenities.includes(val)) {
+                    setAmenities((p) => [...p, val]);
+                    setIsDirty(true);
+                  }
+                  setAmenityInput("");
+                }
+              }}
+              placeholder="Type a feature and press Enter…"
+            />
+            <button type="button" style={primaryBtn} onClick={() => {
+              const val = amenityInput.trim();
+              if (val && !amenities.includes(val)) {
+                setAmenities((p) => [...p, val]);
+                setIsDirty(true);
+              }
+              setAmenityInput("");
+            }}>Add</button>
+          </div>
+
+          {/* Suggestions */}
+          <div style={{ fontSize:12, color:"#6d7175", marginBottom:8 }}>Common suggestions — click to add:</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+            {AMENITY_SUGGESTIONS.filter((s) => !amenities.includes(s)).map((item) => (
+              <button key={item} type="button"
+                onClick={() => { setAmenities((p) => [...p, item]); setIsDirty(true); }}
+                style={{
+                  padding:"5px 12px", fontSize:13, cursor:"pointer", borderRadius:16,
+                  border:"1px solid #e1e3e5", background:"#f6f6f7", color:"#202223",
+                }}>
+                + {item}
+              </button>
+            ))}
           </div>
         </s-section>
 

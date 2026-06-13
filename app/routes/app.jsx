@@ -3,54 +3,81 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getPlanLimits } from "../plans.server";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
 
-  // Fetch shop details from Shopify and upsert into our database
+  let renewalDate = null;
+
   try {
     const response = await admin.graphql(`
       query {
         shop {
           name
           email
-          plan { displayName }
           currencyCode
           ianaTimezone
           billingAddress { countryCodeV2 }
         }
+        currentAppInstallation {
+          activeSubscriptions {
+            name
+            status
+            currentPeriodEnd
+          }
+        }
       }
     `);
     const { data } = await response.json();
-    const s = data?.shop;
+    const s   = data?.shop;
+    const sub = (data?.currentAppInstallation?.activeSubscriptions ?? [])
+      .find((x) => x.status === "ACTIVE");
 
+    renewalDate = sub?.currentPeriodEnd ?? null;
+
+    // Never overwrite plan — managed by billing webhook
     await prisma.shop.upsert({
-      where: { shop: session.shop },
+      where:  { shop },
       update: {
-        name: s?.name,
-        email: s?.email,
-        plan: s?.plan?.displayName,
+        name:     s?.name,
+        email:    s?.email,
         currency: s?.currencyCode,
         timezone: s?.ianaTimezone,
-        country: s?.billingAddress?.countryCodeV2,
+        country:  s?.billingAddress?.countryCodeV2,
       },
       create: {
-        shop: session.shop,
-        name: s?.name,
-        email: s?.email,
-        plan: s?.plan?.displayName,
+        shop,
+        name:     s?.name,
+        email:    s?.email,
+        plan:     "free",
         currency: s?.currencyCode,
         timezone: s?.ianaTimezone,
-        country: s?.billingAddress?.countryCodeV2,
+        country:  s?.billingAddress?.countryCodeV2,
       },
     });
   } catch (e) {
-    // Non-fatal — don't break the app if shop fetch fails
     console.error("Failed to sync shop details:", e);
   }
 
+  const [shopRecord, apartmentCount] = await Promise.all([
+    prisma.shop.findUnique({ where: { shop } }),
+    prisma.apartment.count({ where: { shop } }),
+  ]);
+
+  const appPlan = shopRecord?.plan ?? "free";
+  const limits  = getPlanLimits(appPlan);
+  const apartmentLimit = limits.apartments === Infinity ? null : limits.apartments;
+
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return {
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    appPlan,
+    apartmentCount,
+    apartmentLimit,
+    renewalDate,
+  };
 };
 
 export default function App() {
@@ -71,7 +98,6 @@ export default function App() {
   );
 }
 
-// Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }

@@ -1,4 +1,9 @@
 import { useState } from "react";
+import { useLoaderData, useSubmit, useNavigation } from "react-router";
+import { redirect } from "react-router";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
+import { getPlanLimits, planKeyFromName } from "../plans.server";
 
 const PLANS = [
   {
@@ -9,13 +14,13 @@ const PLANS = [
     badge: null,
     description: "Get started with basic rental management.",
     features: [
-      { text: "Up to 2 apartments",         included: true  },
-      { text: "Booking calendar",            included: true  },
-      { text: "Email notifications",         included: false },
-      { text: "Custom notification templates", included: false },
-      { text: "SMTP email delivery",         included: false },
-      { text: "Analytics & reports",         included: false },
-      { text: "Priority support",            included: false },
+      { text: "1 apartment",                   included: true  },
+      { text: "Booking calendar",               included: true  },
+      { text: "Email notifications",            included: true  },
+      { text: "Custom notification templates",  included: true  },
+      { text: "SMTP email delivery",            included: true  },
+      { text: "Analytics & reports",            included: false },
+      { text: "Priority support",               included: false },
     ],
   },
   {
@@ -26,13 +31,13 @@ const PLANS = [
     badge: "Most Popular",
     description: "Everything you need to run a professional rental business.",
     features: [
-      { text: "Unlimited apartments",        included: true  },
-      { text: "Booking calendar",            included: true  },
-      { text: "Email notifications",         included: true  },
-      { text: "Custom notification templates", included: true  },
-      { text: "SMTP email delivery",         included: true  },
-      { text: "Analytics & reports",         included: false },
-      { text: "Priority support",            included: false },
+      { text: "Unlimited apartments",           included: true  },
+      { text: "Booking calendar",               included: true  },
+      { text: "Email notifications",            included: true  },
+      { text: "Custom notification templates",  included: true  },
+      { text: "SMTP email delivery",            included: true  },
+      { text: "Analytics & reports",            included: false },
+      { text: "Priority support",               included: false },
     ],
   },
   {
@@ -43,25 +48,105 @@ const PLANS = [
     badge: null,
     description: "Advanced features for high-volume rental operations.",
     features: [
-      { text: "Unlimited apartments",        included: true  },
-      { text: "Booking calendar",            included: true  },
-      { text: "Email notifications",         included: true  },
-      { text: "Custom notification templates", included: true  },
-      { text: "SMTP email delivery",         included: true  },
-      { text: "Analytics & reports",         included: true  },
-      { text: "Priority support",            included: true  },
+      { text: "Unlimited apartments",           included: true  },
+      { text: "Booking calendar",               included: true  },
+      { text: "Email notifications",            included: true  },
+      { text: "Custom notification templates",  included: true  },
+      { text: "SMTP email delivery",            included: true  },
+      { text: "Analytics & reports",            included: true  },
+      { text: "Priority support",               included: true  },
     ],
   },
 ];
 
-const CURRENT_PLAN = "free";
+// ─── Loader ──────────────────────────────────────────────────────────────────
 
-const INVOICES = [
-  { id: "INV-0000", date: "—", amount: "—", status: "—", plan: "Free plan — no charges" },
-];
+export const loader = async ({ request }) => {
+  const { session, billing } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  // Get current plan from DB
+  const shopRecord = await prisma.shop.findUnique({ where: { shop } });
+  const currentPlan = shopRecord?.plan ?? "free";
+
+  // Count apartments
+  const apartmentCount = await prisma.apartment.count({ where: { shop } });
+
+  // Check active Shopify subscription
+  let shopifyPlan = null;
+  try {
+    const { appSubscriptions } = await billing.check({
+      plans: ["Pro", "Business"],
+      isTest: true,
+    });
+    if (appSubscriptions?.length > 0) {
+      shopifyPlan = planKeyFromName(appSubscriptions[0].name);
+    }
+  } catch (_) {
+    // billing.check throws when no active subscription — that's fine
+  }
+
+  const limits = getPlanLimits(currentPlan);
+
+  return {
+    currentPlan,
+    shopifyPlan,
+    apartmentCount,
+    apartmentLimit: limits.apartments,
+  };
+};
+
+// ─── Action ──────────────────────────────────────────────────────────────────
+
+export const action = async ({ request }) => {
+  const { billing } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const plan     = formData.get("plan");       // "Pro" | "Business"
+  const intent   = formData.get("intent");
+
+  if (intent === "cancel") {
+    try {
+      await billing.cancel({
+        isTest: true,
+        prorate: false,
+      });
+    } catch (_) {}
+    return redirect("/app/subscribtion");
+  }
+
+  if (plan !== "Pro" && plan !== "Business") {
+    return { error: "Invalid plan" };
+  }
+
+  const url             = new URL(request.url);
+  const returnUrl       = `${url.origin}/app/subscribtion`;
+  const { confirmationUrl } = await billing.request({
+    plan,
+    isTest: true,
+    returnUrl,
+  });
+  return redirect(confirmationUrl);
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SubscriptionPage() {
+  const { currentPlan, apartmentCount, apartmentLimit } = useLoaderData();
+  const submit      = useSubmit();
+  const navigation  = useNavigation();
   const [billing, setBilling] = useState("monthly");
+
+  const isSubmitting = navigation.state === "submitting";
+
+  function handleUpgrade(planName) {
+    const fd = new FormData();
+    fd.append("plan", planName);
+    submit(fd, { method: "POST" });
+  }
+
+  const limits = apartmentLimit === Infinity ? "Unlimited" : apartmentLimit;
+  const usedPct = apartmentLimit === Infinity ? 0 : Math.min(100, (apartmentCount / apartmentLimit) * 100);
+  const planLabel = PLANS.find(p => p.key === currentPlan)?.name ?? "Free";
 
   return (
     <s-page heading="Subscription">
@@ -100,27 +185,29 @@ export default function SubscriptionPage() {
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#202223" }}>
-                Free Plan
+                {planLabel} Plan
               </div>
               <div style={{ fontSize: 13, color: "#6d7175", marginTop: 2 }}>
-                You are currently on the free plan · 2 apartments used of 2
+                {apartmentCount} of {limits} apartment{limits !== 1 ? "s" : ""} used
               </div>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div
-              style={{
-                height: 8,
-                width: 120,
-                borderRadius: 4,
-                background: "#e1e3e5",
-                overflow: "hidden",
-              }}
-            >
-              <div style={{ width: "100%", height: "100%", background: "#008060", borderRadius: 4 }} />
+          {apartmentLimit !== Infinity && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div
+                style={{
+                  height: 8,
+                  width: 120,
+                  borderRadius: 4,
+                  background: "#e1e3e5",
+                  overflow: "hidden",
+                }}
+              >
+                <div style={{ width: `${usedPct}%`, height: "100%", background: usedPct >= 100 ? "#d82c0d" : "#008060", borderRadius: 4 }} />
+              </div>
+              <span style={{ fontSize: 12, color: "#6d7175" }}>{apartmentCount} / {limits}</span>
             </div>
-            <span style={{ fontSize: 12, color: "#6d7175" }}>2 / 2</span>
-          </div>
+          )}
         </div>
       </s-section>
 
@@ -136,7 +223,6 @@ export default function SubscriptionPage() {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 0,
             background: "#f6f6f7",
             border: "1px solid #e1e3e5",
             borderRadius: 8,
@@ -190,10 +276,11 @@ export default function SubscriptionPage() {
           }}
         >
           {PLANS.map((plan) => {
-            const isCurrent = plan.key === CURRENT_PLAN;
+            const isCurrent = plan.key === currentPlan;
             const price = billing === "yearly" && plan.price > 0
               ? Math.round(plan.price * 0.8)
               : plan.price;
+            const planName = plan.name; // "Pro" | "Business" match billing config
 
             return (
               <div
@@ -206,11 +293,9 @@ export default function SubscriptionPage() {
                   background: "#fff",
                   display: "flex",
                   flexDirection: "column",
-                  gap: 0,
                 }}
               >
-                {/* Badge */}
-                {plan.badge && (
+                {plan.badge && !isCurrent && (
                   <div
                     style={{
                       position: "absolute",
@@ -249,7 +334,6 @@ export default function SubscriptionPage() {
                   </div>
                 )}
 
-                {/* Plan name & price */}
                 <div style={{ fontSize: 16, fontWeight: 700, color: "#202223", marginBottom: 4 }}>
                   {plan.name}
                 </div>
@@ -258,14 +342,15 @@ export default function SubscriptionPage() {
                     {price === 0 ? "Free" : `$${price}`}
                   </span>
                   {price > 0 && (
-                    <span style={{ fontSize: 13, color: "#6d7175" }}>/ {billing === "yearly" ? "mo, billed yearly" : "month"}</span>
+                    <span style={{ fontSize: 13, color: "#6d7175" }}>
+                      / {billing === "yearly" ? "mo, billed yearly" : "month"}
+                    </span>
                   )}
                 </div>
                 <div style={{ fontSize: 13, color: "#6d7175", marginBottom: 16 }}>
                   {plan.description}
                 </div>
 
-                {/* Features */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, marginBottom: 20 }}>
                   {plan.features.map((f, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -279,7 +364,6 @@ export default function SubscriptionPage() {
                   ))}
                 </div>
 
-                {/* CTA */}
                 {isCurrent ? (
                   <div
                     style={{
@@ -296,6 +380,8 @@ export default function SubscriptionPage() {
                   </div>
                 ) : (
                   <button
+                    disabled={isSubmitting}
+                    onClick={() => plan.price > 0 ? handleUpgrade(planName) : undefined}
                     style={{
                       padding: "10px",
                       background: plan.badge ? "#2c6ecb" : "#202223",
@@ -304,11 +390,12 @@ export default function SubscriptionPage() {
                       borderRadius: 8,
                       fontSize: 14,
                       fontWeight: 600,
-                      cursor: "pointer",
+                      cursor: isSubmitting ? "not-allowed" : "pointer",
+                      opacity: isSubmitting ? 0.7 : 1,
                       width: "100%",
                     }}
                   >
-                    {plan.price === 0 ? "Downgrade" : "Upgrade to " + plan.name}
+                    {isSubmitting ? "Redirecting…" : plan.price === 0 ? "Downgrade to Free" : `Upgrade to ${plan.name}`}
                   </button>
                 )}
               </div>
@@ -323,19 +410,13 @@ export default function SubscriptionPage() {
 
       {/* Feature comparison */}
       <s-section heading="Full Feature Comparison">
-        <div
-          style={{
-            border: "1px solid #e1e3e5",
-            borderRadius: 8,
-            overflow: "hidden",
-          }}
-        >
+        <div style={{ border: "1px solid #e1e3e5", borderRadius: 8, overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
                 <th style={{ ...thStyle, textAlign: "left" }}>Feature</th>
                 {PLANS.map((p) => (
-                  <th key={p.key} style={{ ...thStyle, textAlign: "center", color: p.key === CURRENT_PLAN ? "#008060" : "#202223" }}>
+                  <th key={p.key} style={{ ...thStyle, textAlign: "center", color: p.key === currentPlan ? "#008060" : "#202223" }}>
                     {p.name}
                   </th>
                 ))}
@@ -343,14 +424,14 @@ export default function SubscriptionPage() {
             </thead>
             <tbody>
               {[
-                { label: "Apartments",              values: ["2",  "Unlimited", "Unlimited"] },
-                { label: "Booking calendar",         values: [true, true,       true        ] },
-                { label: "Email notifications",      values: [false, true,      true        ] },
-                { label: "Notification templates",   values: [false, true,      true        ] },
-                { label: "SMTP delivery",            values: [false, true,      true        ] },
-                { label: "Analytics & reports",      values: [false, false,     true        ] },
-                { label: "Priority support",         values: [false, false,     true        ] },
-                { label: "Monthly price",            values: ["Free", "$19/mo", "$49/mo"    ] },
+                { label: "Apartments",             values: ["1",   "Unlimited", "Unlimited"] },
+                { label: "Booking calendar",        values: [true,  true,       true        ] },
+                { label: "Email notifications",     values: [true,  true,       true        ] },
+                { label: "Notification templates",  values: [true,  true,       true        ] },
+                { label: "SMTP delivery",           values: [true,  true,       true        ] },
+                { label: "Analytics & reports",     values: [false, false,      true        ] },
+                { label: "Priority support",        values: [false, false,      true        ] },
+                { label: "Monthly price",           values: ["Free", "$19/mo", "$49/mo"    ] },
               ].map((row, i) => (
                 <tr
                   key={i}
@@ -381,14 +462,7 @@ export default function SubscriptionPage() {
           Your invoices and payment history will appear here once you upgrade to
           a paid plan.
         </s-paragraph>
-        <div
-          style={{
-            border: "1px solid #e1e3e5",
-            borderRadius: 8,
-            overflow: "hidden",
-            marginTop: 8,
-          }}
-        >
+        <div style={{ border: "1px solid #e1e3e5", borderRadius: 8, overflow: "hidden", marginTop: 8 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
@@ -402,14 +476,7 @@ export default function SubscriptionPage() {
             <tbody>
               <tr>
                 <td style={tdStyle} colSpan={5}>
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: "24px 0",
-                      color: "#6d7175",
-                      fontSize: 14,
-                    }}
-                  >
+                  <div style={{ textAlign: "center", padding: "24px 0", color: "#6d7175", fontSize: 14 }}>
                     No invoices yet — upgrade to a paid plan to see billing history.
                   </div>
                 </td>
@@ -439,13 +506,7 @@ export default function SubscriptionPage() {
             a: "Yes. You can switch billing periods at any time. When switching to yearly, the saving is applied from your next billing cycle.",
           },
         ].map((item, i) => (
-          <div
-            key={i}
-            style={{
-              padding: "14px 0",
-              borderBottom: i < 3 ? "1px solid #e1e3e5" : "none",
-            }}
-          >
+          <div key={i} style={{ padding: "14px 0", borderBottom: i < 3 ? "1px solid #e1e3e5" : "none" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "#202223", marginBottom: 4 }}>
               {item.q}
             </div>

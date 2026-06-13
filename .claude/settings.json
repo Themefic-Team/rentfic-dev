@@ -9,7 +9,16 @@
       "PowerShell($procs = Get-WmiObject Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -match \"react-router|vite\" }; $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 2; cd \"d:\\\\shopify-app\\\\rentfic-dev\"; npx prisma generate 2>&1)",
       "Bash(cd /d \"d:\\\\shopify-app\\\\rentfic-dev\")",
       "Bash(npm run *)",
-      "Bash(del \"d:\\\\shopify-app\\\\rentfic-dev\\\\extensions\\\\rentfic\\\\blocks\\\\booking_widget.liquid\")"
+      "Bash(del \"d:\\\\shopify-app\\\\rentfic-dev\\\\extensions\\\\rentfic\\\\blocks\\\\booking_widget.liquid\")",
+      "PowerShell(Get-Process | Where-Object { $_.ProcessName -match \"node\" } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize)",
+      "Bash(pandoc --version)",
+      "PowerShell(pandoc --version 2>$null)",
+      "PowerShell(if \\(-not $?\\) { \"not found\" })",
+      "PowerShell(node --version)",
+      "PowerShell(npm list docx 2>$null)",
+      "PowerShell(npm install --save-dev docx --prefix \"D:\\\\shopify-app\\\\rentfic-dev\" --silent 2>&1)",
+      "PowerShell(npm list docx --prefix \"D:\\\\shopify-app\\\\rentfic-dev\" 2>$null)",
+      "PowerShell(\\(Get-Item \"D:\\\\shopify-app\\\\rentfic-dev\\\\docs\\\\QA_TESTING.docx\"\\).Length / 1KB)"
     ]
   }
 }

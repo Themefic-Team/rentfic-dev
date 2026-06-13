@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { PlanCard } from "../components/PlanCard";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -71,6 +72,7 @@ export default function BookingPage() {
 
   return (
     <s-page heading="Bookings">
+      <PlanCard />
 
       <s-section>
         <s-paragraph>All rental bookings across your apartments.</s-paragraph>

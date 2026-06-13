@@ -3,6 +3,8 @@ import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-ro
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { DEFAULT_TEMPLATES } from "../notification-defaults";
+import { PlanCard } from "../components/PlanCard";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -38,64 +40,6 @@ const PARAMS = [
   { var: "{{customer.lastName}}",   label: "Last Name"       },
 ];
 
-const DEFAULT_TEMPLATES = {
-  bookingConfirmation: {
-    enabled: true,
-    subject: "{{order.name}} - Your booking of {{product.name}}",
-    body: "Hi {{customer.firstName}},\n\nWe got your booking of <strong>{{product.name}}</strong> for <strong>{{date}}</strong>.\n\nCheck-in:  {{start}}\nCheck-out: {{end}}\n\nThanks.",
-    timing: null,
-    groupMails: false,
-    whenToRemind: "disabled",
-  },
-  bookingReminder: {
-    enabled: true,
-    subject: "Reminder: Your stay at {{product.name}} starts soon",
-    body: "Hi {{customer.firstName}},\n\nThis is a reminder that your booking of <strong>{{product.name}}</strong> starts on <strong>{{start}}</strong>.\n\nCheck-out: {{end}}\n\nSee you soon!",
-    timing: 2,
-    groupMails: false,
-    whenToRemind: "disabled",
-  },
-  checkinDay: {
-    enabled: true,
-    subject: "Today is your check-in day – {{product.name}}",
-    body: "Hi {{customer.firstName}},\n\nToday is your check-in day at <strong>{{product.name}}</strong>.\n\nWe hope you have a wonderful stay!",
-    timing: null,
-    groupMails: false,
-    whenToRemind: "disabled",
-  },
-  checkoutReminder: {
-    enabled: true,
-    subject: "Check-out reminder – {{product.name}}",
-    body: "Hi {{customer.firstName}},\n\nJust a reminder that your check-out from <strong>{{product.name}}</strong> is tomorrow.\n\nSafe travels!",
-    timing: null,
-    groupMails: false,
-    whenToRemind: "disabled",
-  },
-  bookingCancelled: {
-    enabled: true,
-    subject: "Your booking at {{product.name}} has been cancelled",
-    body: "Hi {{customer.firstName}},\n\nYour booking of <strong>{{product.name}}</strong> ({{start}} – {{end}}) has been cancelled.\n\nIf you have any questions please contact us.",
-    timing: null,
-    groupMails: false,
-    whenToRemind: "disabled",
-  },
-  ownerNewBooking: {
-    enabled: true,
-    subject: "New booking – {{product.name}} by {{customer.firstName}} {{customer.lastName}}",
-    body: "A new booking has been received.\n\nProduct: {{product.name}}\nOrder:   {{order.name}}\nGuest:   {{customer.firstName}} {{customer.lastName}}\nStart:   {{start}}\nEnd:     {{end}}",
-    timing: null,
-    groupMails: false,
-    whenToRemind: "disabled",
-  },
-  reviewRequest: {
-    enabled: true,
-    subject: "How was your stay at {{product.name}}?",
-    body: "Hi {{customer.firstName}},\n\nThank you for staying at <strong>{{product.name}}</strong>!\n\nWe would love to hear your feedback.",
-    timing: 1,
-    groupMails: false,
-    whenToRemind: "disabled",
-  },
-};
 
 // ─── Loader / Action ──────────────────────────────────────────────────────────
 
@@ -111,17 +55,27 @@ export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
 
+  // Test email intent
+  if (formData.get("_intent") === "test") {
+    const { sendNotification, DUMMY_VARS } = await import("../email.server");
+    const type = formData.get("type");
+    const to   = formData.get("to");
+    if (!type || !to) return { testResult: { skipped: true, reason: "missing_params" } };
+    const result = await sendNotification(session.shop, type, DUMMY_VARS, { to });
+    return { testResult: result };
+  }
+
   const data = {
-    shop:          session.shop,
-    emailProvider: formData.get("emailProvider") || "default",
-    smtpHost:      formData.get("smtpHost")      || null,
-    smtpPort:      formData.get("smtpPort")       ? parseInt(formData.get("smtpPort")) : null,
-    smtpUser:      formData.get("smtpUser")      || null,
-    smtpPass:      formData.get("smtpPass")      || null,
-    smtpFromName:  formData.get("smtpFromName")  || null,
-    smtpFromEmail: formData.get("smtpFromEmail") || null,
+    shop:           session.shop,
+    emailProvider:  formData.get("emailProvider")  || "default",
+    smtpHost:       formData.get("smtpHost")       || null,
+    smtpPort:       formData.get("smtpPort") ? parseInt(formData.get("smtpPort")) : null,
+    smtpUser:       formData.get("smtpUser")       || null,
+    smtpPass:       formData.get("smtpPass")       || null,
+    smtpFromName:   formData.get("smtpFromName")   || null,
+    smtpFromEmail:  formData.get("smtpFromEmail")  || null,
     smtpEncryption: formData.get("smtpEncryption") || "tls",
-    templates:     JSON.parse(formData.get("templates") || "{}"),
+    templates:      JSON.parse(formData.get("templates") || "{}"),
   };
 
   await prisma.notificationConfig.upsert({
@@ -136,7 +90,7 @@ export const action = async ({ request }) => {
 // ─── Page component ───────────────────────────────────────────────────────────
 
 export default function NotificationsPage() {
-  const { config }   = useLoaderData();
+  const { config } = useLoaderData();
   const actionData   = useActionData();
   const submit       = useSubmit();
   const navigation   = useNavigation();
@@ -175,13 +129,33 @@ export default function NotificationsPage() {
       : shopify.saveBar.hide("notifications-save-bar");
   }, [isDirty, shopify]);
 
-  // Toast on success
+  // Toast on save
   useEffect(() => {
     if (actionData?.success) {
       shopify.toast.show("Notifications saved");
       setIsDirty(false);
     }
   }, [actionData, shopify]);
+
+  // Toast on test email result
+  useEffect(() => {
+    const r = actionData?.testResult;
+    if (!r) return;
+    if (r.sent) {
+      if (r.preview) {
+        shopify.toast.show("Test email sent → check server console for Ethereal preview URL");
+      } else {
+        shopify.toast.show(`Test email sent to ${testEmail}`);
+      }
+    } else {
+      const reasons = {
+        disabled:     "Notification is disabled for this template.",
+        no_recipient: "No recipient address provided.",
+      };
+      shopify.toast.show(reasons[r.reason] || `Could not send: ${r.reason}`, { isError: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionData?.testResult]);
 
   const setTpl = (field, value) => {
     setTemplates((prev) => ({
@@ -247,6 +221,7 @@ export default function NotificationsPage() {
         <s-button slot="primary-action" onClick={handleSave} loading={isSaving}>
           Save
         </s-button>
+        <PlanCard />
 
         {/* ── Email templates ───────────────────────────────────────── */}
         <s-section heading="Reminders">
@@ -479,9 +454,14 @@ export default function NotificationsPage() {
               />
               <s-button
                 variant="secondary"
+                loading={isSaving ? "" : undefined}
                 onClick={() => {
                   if (!testEmail) return shopify.toast.show("Enter an email address first", { isError: true });
-                  shopify.toast.show(`Test email sent to ${testEmail}`);
+                  const fd = new FormData();
+                  fd.append("_intent", "test");
+                  fd.append("type", activeTab);
+                  fd.append("to", testEmail);
+                  submit(fd, { method: "POST" });
                 }}
               >
                 Send {TABS.find((t) => t.key === activeTab)?.label}
@@ -509,17 +489,7 @@ export default function NotificationsPage() {
               />
               <div>
                 <span style={{ fontWeight: 500 }}>SMTP</span>
-                <span
-                  style={{
-                    marginLeft: 8,
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: "1px 8px",
-                    borderRadius: 10,
-                    background: "#008060",
-                    color: "#fff",
-                  }}
-                >
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 10, background: "#008060", color: "#fff" }}>
                   Recommended
                 </span>
               </div>
@@ -621,22 +591,31 @@ export default function NotificationsPage() {
                   />
                 </div>
               </div>
-
               <div
                 style={{
-                  marginTop: 14,
-                  padding: "10px 14px",
-                  background: "#fff8e1",
-                  border: "1px solid #ffd166",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  color: "#5c3d00",
+                  marginTop: 14, padding: "10px 14px",
+                  background: "#fff8e1", border: "1px solid #ffd166",
+                  borderRadius: 8, fontSize: 13, color: "#5c3d00",
                 }}
               >
                 <strong>Gmail tip:</strong> Use an App Password instead of your account
                 password. Enable 2-step verification in your Google account, then generate
                 an App Password under Security → App passwords.
               </div>
+            </div>
+          )}
+
+          {emailProvider === "default" && (
+            <div
+              style={{
+                marginTop: 16, padding: "10px 14px",
+                background: "#f6f6f7", border: "1px solid #e1e3e5",
+                borderRadius: 8, fontSize: 13, color: "#6d7175",
+              }}
+            >
+              Uses app-level <code>SMTP_HOST</code> environment variables.
+              If none are configured, emails are sent to an Ethereal test inbox —
+              check the server console for the preview URL.
             </div>
           )}
         </s-section>
