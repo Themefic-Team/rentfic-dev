@@ -1,4 +1,7 @@
 import { useRouteLoaderData } from "react-router";
+import { Icon } from "@shopify/polaris";
+import { AlertTriangleIcon } from "@shopify/polaris-icons";
+import { ClipboardCheckFilledIcon, ChevronRightIcon  } from "@shopify/polaris-icons";
 
 const PLAN_STYLE = {
   free:     { bg: "#f6f6f7", border: "#e1e3e5", badge: "#8c9196", bar: "#8c9196" },
@@ -9,7 +12,7 @@ const PLAN_STYLE = {
 export function PlanCard({ data: dataProp }) {
   const routeData = useRouteLoaderData("routes/app");
   const data = dataProp ?? routeData;
-  if (!data) return null;
+  if (!data) return null; 
 
   const { appPlan, apartmentCount, apartmentLimit, renewalDate } = data;
   const planKey  = (appPlan ?? "free").toLowerCase();
@@ -62,7 +65,12 @@ export function PlanCard({ data: dataProp }) {
             whiteSpace: "nowrap",
           }}
         >
-          ✦ {planName} Plan
+          {appPlan === "free" ? (
+            <Icon source={AlertTriangleIcon} tone="inherit" />
+          ) : (
+            <Icon source={ClipboardCheckFilledIcon} tone="inherit" />
+          )}
+          {planName} Plan
         </div>
 
         {/* Usage (free plan) */}
@@ -118,6 +126,9 @@ export function PlanCard({ data: dataProp }) {
       <a
         href="/app/subscribtion"
         style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
           fontSize: 12,
           fontWeight: 600,
           color: style.badge,
@@ -129,7 +140,7 @@ export function PlanCard({ data: dataProp }) {
           whiteSpace: "nowrap",
         }}
       >
-        {isPaid ? "Manage →" : atLimit ? "Upgrade to add more →" : "Upgrade plan →"}
+        {isPaid ? <>Manage <Icon source={ChevronRightIcon } tone="inherit" /></> : atLimit ? <>Upgrade to add more <Icon source={ChevronRightIcon } tone="inherit" /></> : <>Upgrade plan <Icon source={ChevronRightIcon } tone="inherit" /></>}
       </a>
     </div>
   );

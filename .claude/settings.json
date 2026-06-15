@@ -29,7 +29,8 @@
       "Bash(python3 docs/gen_qa.py)",
       "Bash(del \"d:\\\\shopify-app\\\\rentfic-dev\\\\docs\\\\gen_qa.py\")",
       "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
-      "PowerShell(Stop-Process -Force -Confirm:$false)"
+      "PowerShell(Stop-Process -Force -Confirm:$false)",
+      "Bash(npx shopify *)"
     ],
     "additionalDirectories": [
       "D:\\shopify-app\\rentfic-dev\\node_modules\\.prisma\\client"

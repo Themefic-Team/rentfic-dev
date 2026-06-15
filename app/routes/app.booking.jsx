@@ -34,6 +34,31 @@ async function createDraftOrder(admin, booking, balanceAmount) {
   return json?.data?.draftOrderCreate?.draftOrder ?? null;
 }
 
+// Runs once per server process per shop to backfill "rentfic" tag on already-linked orders
+const taggedShops = new Set();
+async function backfillOrderTags(admin, shop) {
+  if (taggedShops.has(shop)) return;
+  taggedShops.add(shop);
+
+  const linked = await prisma.booking.findMany({
+    where: { shop, orderId: { not: null } },
+    select: { orderId: true },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  await Promise.all(linked.map((b) =>
+    admin.graphql(`
+      mutation tagsAdd($id: ID!, $tags: [String!]!) {
+        tagsAdd(id: $id, tags: $tags) {
+          node { id }
+          userErrors { field message }
+        }
+      }
+    `, { variables: { id: `gid://shopify/Order/${b.orderId}`, tags: ["rentfic"] } }).catch(() => {})
+  ));
+}
+
 async function syncUnlinkedBookings(admin, shop) {
   const unlinked = await prisma.booking.findMany({
     where: { shop, orderId: null },
@@ -50,7 +75,7 @@ async function syncUnlinkedBookings(admin, shop) {
             id
             name
             email
-            customer { firstName lastName }
+            billingAddress { firstName lastName }
             lineItems(first: 10) {
               edges { node { customAttributes { key value } } }
             }
@@ -73,7 +98,7 @@ async function syncUnlinkedBookings(admin, shop) {
 
       const numericId    = order.id.split("/").pop();
       const orderNumber  = order.name?.replace("#", "") || "";
-      const customerName = [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
+      const customerName = [order.billingAddress?.firstName, order.billingAddress?.lastName].filter(Boolean).join(" ") || null;
 
       // Link the booking to the order
       const updated = await prisma.booking.update({
@@ -86,6 +111,16 @@ async function syncUnlinkedBookings(admin, shop) {
           status:        "confirmed",
         },
       });
+
+      // Tag the Shopify order with "rentfic"
+      await admin.graphql(`
+        mutation tagsAdd($id: ID!, $tags: [String!]!) {
+          tagsAdd(id: $id, tags: $tags) {
+            node { id }
+            userErrors { field message }
+          }
+        }
+      `, { variables: { id: order.id, tags: ["rentfic"] } }).catch(() => {});
 
       // If deposit was paid and apartment has balanceAutoInvoice enabled, create draft order
       if (booking.depositAmount && booking.totalPrice && !updated.draftOrderId) {
@@ -124,6 +159,7 @@ export const loader = async ({ request }) => {
 
   // Sync any bookings that don't yet have an order linked
   await syncUnlinkedBookings(admin, session.shop).catch(() => {});
+  await backfillOrderTags(admin, session.shop).catch(() => {});
 
   const bookings = await prisma.booking.findMany({
     where: { shop: session.shop },
@@ -168,7 +204,76 @@ export const action = async ({ request }) => {
   const intent    = fd.get("intent");
   const bookingId = fd.get("bookingId");
 
-  if (intent === "markCompleted") {
+  if (intent === "syncOrders") {
+    const unlinked = await prisma.booking.findMany({
+      where: { shop: session.shop, orderId: null },
+      select: { id: true },
+    });
+
+    const res = await admin.graphql(`
+      query {
+        orders(first: 50, sortKey: CREATED_AT, reverse: true) {
+          edges {
+            node {
+              id name email
+              billingAddress { firstName lastName }
+              lineItems(first: 10) {
+                edges { node { customAttributes { key value } } }
+              }
+            }
+          }
+        }
+      }
+    `);
+    const json = await res.json();
+    const orders = json?.data?.orders?.edges ?? [];
+
+    let linked = 0;
+    const unlinkedIds = new Set(unlinked.map((b) => b.id));
+
+    for (const { node: order } of orders) {
+      for (const { node: item } of order.lineItems.edges) {
+        const attrs     = Object.fromEntries((item.customAttributes || []).map((a) => [a.key, a.value]));
+        const bookingId = attrs["_booking_id"];
+        if (!bookingId || !unlinkedIds.has(bookingId)) continue;
+
+        const numericId    = order.id.split("/").pop();
+        const orderNumber  = order.name?.replace("#", "") || "";
+        const customerName = [order.billingAddress?.firstName, order.billingAddress?.lastName].filter(Boolean).join(" ") || null;
+
+        await prisma.booking.update({
+          where: { id: bookingId },
+          data: {
+            orderId:       numericId,
+            orderNumber,
+            customerName:  customerName || undefined,
+            customerEmail: order.email   || undefined,
+            status:        "confirmed",
+          },
+        });
+
+        await admin.graphql(`
+          mutation tagsAdd($id: ID!, $tags: [String!]!) {
+            tagsAdd(id: $id, tags: $tags) { node { id } userErrors { field message } }
+          }
+        `, { variables: { id: order.id, tags: ["rentfic"] } }).catch(() => {});
+
+        linked++;
+        unlinkedIds.delete(bookingId);
+      }
+    }
+
+    return {
+      success: true,
+      syncResult: {
+        shopifyOrders: orders.length,
+        unlinkedBefore: unlinked.length,
+        linked,
+        stillUnlinked: unlinked.length - linked,
+      },
+    };
+
+  } else if (intent === "markCompleted") {
     await prisma.booking.update({ where: { id: bookingId }, data: { status: "completed" } });
 
   } else if (intent === "updateStatus") {
@@ -312,6 +417,14 @@ export default function BookingPage() {
     fetcher.submit(fd, { method: "POST" });
   };
 
+  const handleSyncOrders = () => {
+    const fd = new FormData();
+    fd.append("intent", "syncOrders");
+    fetcher.submit(fd, { method: "POST" });
+  };
+
+  const syncResult = fetcher.data?.syncResult;
+
   const handleSendInvoice = (bookingId) => {
     const fd = new FormData();
     fd.append("intent", "sendInvoice");
@@ -324,6 +437,21 @@ export default function BookingPage() {
       <PlanCard />
 
       <s-section>
+        {/* Sync result banner */}
+        {syncResult && (
+          <div style={{
+            marginBottom: 14, padding: "10px 16px", borderRadius: 8, fontSize: 13,
+            background: syncResult.linked > 0 ? "#d4edda" : "#fff3cd",
+            color: syncResult.linked > 0 ? "#155724" : "#856404",
+            border: `1px solid ${syncResult.linked > 0 ? "#c3e6cb" : "#ffc107"}`,
+          }}>
+            {syncResult.linked > 0
+              ? `✓ Synced ${syncResult.linked} booking${syncResult.linked !== 1 ? "s" : ""} with Shopify orders. ${syncResult.stillUnlinked} booking${syncResult.stillUnlinked !== 1 ? "s" : ""} still unlinked (no matching Shopify order found).`
+              : `No new matches found. Shopify returned ${syncResult.shopifyOrders} orders, ${syncResult.unlinkedBefore} bookings have no order yet — customers may not have completed checkout.`
+            }
+          </div>
+        )}
+
         {/* Top filter bar */}
         <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
           {/* Search */}
@@ -337,6 +465,21 @@ export default function BookingPage() {
               style={{ width: "100%", padding: "9px 12px 9px 32px", border: "1px solid #c9cccf", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
             />
           </div>
+
+          {/* Sync Orders button */}
+          <button
+            onClick={handleSyncOrders}
+            disabled={fetcher.state !== "idle"}
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "9px 16px", border: "1px solid #005bd3", borderRadius: 8,
+              fontSize: 13, fontWeight: 600, cursor: "pointer",
+              background: "#005bd3", color: "#fff",
+              opacity: fetcher.state !== "idle" ? 0.6 : 1,
+            }}
+          >
+            {fetcher.state !== "idle" ? "Syncing…" : "⟳ Sync Orders"}
+          </button>
 
           {/* Future Bookings toggle */}
           <button

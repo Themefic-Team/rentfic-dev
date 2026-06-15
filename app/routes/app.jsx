@@ -45,6 +45,7 @@ export const loader = async ({ request }) => {
       update: {
         name:     s?.name,
         email:    s?.email,
+        // plan:     "free",
         currency: s?.currencyCode,
         timezone: s?.ianaTimezone,
         country:  s?.billingAddress?.countryCodeV2,
