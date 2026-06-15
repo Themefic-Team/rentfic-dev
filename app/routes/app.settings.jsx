@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLoaderData, useSubmit, useNavigation } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
+import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
+import { Popover, DatePicker, TextField, Icon, Card, Button, Box, InlineStack } from "@shopify/polaris";
+import { CalendarIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { PlanCard } from "../components/PlanCard";
+import { TimezoneSelect } from "../components/TimezoneSelect";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -23,10 +26,7 @@ export const action = async ({ request }) => {
     timeFormat: formData.get("timeFormat"),
     translate: formData.get("translate"),
     redirectAfterCart: formData.get("redirectAfterCart"),
-    fromPrice: formData.get("fromPrice"),
     displayCalendar: formData.get("displayCalendar"),
-    quantityPosition: formData.get("quantityPosition"),
-    startCalendar: formData.get("startCalendar"),
     depositType: formData.get("depositType"),
     depositValue: formData.get("depositValue")
       ? parseFloat(formData.get("depositValue"))
@@ -50,31 +50,102 @@ export default function SettingsPage() {
   const shopify = useAppBridge();
 
   const isSaving = navigation.state === "submitting";
-  const prevState = useRef(navigation.state);
+  const submittedRef = useRef(false);
   useEffect(() => {
-    if (prevState.current === "submitting" && navigation.state === "idle") {
+    if (navigation.state === "submitting") {
+      submittedRef.current = true;
+    } else if (navigation.state === "idle" && submittedRef.current) {
+      submittedRef.current = false;
       shopify.toast.show("Settings saved");
     }
-    prevState.current = navigation.state;
   }, [navigation.state, shopify]);
 
   const [timezone, setTimezone] = useState(settings?.timezone ?? "Asia/Dhaka");
   const [timeFormat, setTimeFormat] = useState(settings?.timeFormat ?? "12");
   const [translate, setTranslate] = useState(settings?.translate ?? "automatic");
   const [redirectAfterCart, setRedirectAfterCart] = useState(settings?.redirectAfterCart ?? "automatic");
-  const [fromPrice, setFromPrice] = useState(settings?.fromPrice ?? "automatic");
   const [displayCalendar, setDisplayCalendar] = useState(settings?.displayCalendar ?? "always_open");
-  const [quantityPosition, setQuantityPosition] = useState(settings?.quantityPosition ?? "product_and_calendar");
-  const [startCalendar, setStartCalendar] = useState(settings?.startCalendar ?? "current_date");
   const [blockedDates, setBlockedDates] = useState(settings?.blockedDates ?? []);
-  const [datePickerValue, setDatePickerValue] = useState("");
   const [depositType, setDepositType] = useState(settings?.depositType ?? "percent");
   const [depositValue, setDepositValue] = useState(settings?.depositValue?.toString() ?? "");
 
+  const isDirty = useMemo(() => {
+    const s = settings ?? {};
+    if (timezone           !== (s.timezone           ?? "Asia/Dhaka"))                return true;
+    if (timeFormat         !== (s.timeFormat          ?? "12"))                        return true;
+    if (translate          !== (s.translate           ?? "automatic"))                 return true;
+    if (redirectAfterCart  !== (s.redirectAfterCart   ?? "automatic"))                 return true;
+    if (displayCalendar    !== (s.displayCalendar     ?? "always_open"))               return true;
+    if (depositType        !== (s.depositType         ?? "percent"))                   return true;
+    if (depositValue       !== (s.depositValue?.toString() ?? ""))                     return true;
+    if (JSON.stringify(blockedDates) !== JSON.stringify(s.blockedDates ?? []))         return true;
+    return false;
+  }, [settings, timezone, timeFormat, translate, redirectAfterCart,
+      displayCalendar, depositType, depositValue, blockedDates]);
+
+  function handleDiscard() {
+    const s = settings ?? {};
+    setTimezone(s.timezone ?? "Asia/Dhaka");
+    setTimeFormat(s.timeFormat ?? "12");
+    setTranslate(s.translate ?? "automatic");
+    setRedirectAfterCart(s.redirectAfterCart ?? "automatic");
+    setDisplayCalendar(s.displayCalendar ?? "always_open");
+    setDepositType(s.depositType ?? "percent");
+    setDepositValue(s.depositValue?.toString() ?? "");
+    setBlockedDates(s.blockedDates ?? []);
+  }
+
+  const [popoverActive, setPopoverActive] = useState(false);
+  const [selectedDate, setSelectedDate]   = useState(null);
+  const [{ month, year }, setDateState]   = useState({
+    month: new Date().getMonth(),
+    year:  new Date().getFullYear(),
+  });
+  const datePickerRef = useRef(null);
+
+  function toLocalDateString(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  const formattedPickerValue = selectedDate ? toLocalDateString(selectedDate) : "";
+
+  function nodeContainsDescendant(root, node) {
+    if (root === node) return true;
+    let parent = node.parentNode;
+    while (parent) {
+      if (parent === root) return true;
+      parent = parent.parentNode;
+    }
+    return false;
+  }
+
+  const handlePopoverClose = useCallback(({ relatedTarget }) => {
+    if (
+      relatedTarget instanceof Node &&
+      datePickerRef.current &&
+      nodeContainsDescendant(datePickerRef.current, relatedTarget)
+    ) return;
+    setPopoverActive(false);
+  }, []);
+
+  function handleMonthChange(m, y) {
+    setDateState({ month: m, year: y });
+  }
+
+  function handleDateSelection({ end }) {
+    setSelectedDate(end);
+    setPopoverActive(false);
+  }
+
   function addBlockedDate() {
-    if (!datePickerValue || blockedDates.includes(datePickerValue)) return;
-    setBlockedDates([...blockedDates, datePickerValue].sort());
-    setDatePickerValue("");
+    if (!selectedDate) return;
+    const dateStr = toLocalDateString(selectedDate);
+    if (blockedDates.includes(dateStr)) return;
+    setBlockedDates((prev) => [...prev, dateStr].sort());
+    setSelectedDate(null);
   }
 
   function removeBlockedDate(date) {
@@ -87,10 +158,7 @@ export default function SettingsPage() {
     formData.append("timeFormat", timeFormat);
     formData.append("translate", translate);
     formData.append("redirectAfterCart", redirectAfterCart);
-    formData.append("fromPrice", fromPrice);
     formData.append("displayCalendar", displayCalendar);
-    formData.append("quantityPosition", quantityPosition);
-    formData.append("startCalendar", startCalendar);
     formData.append("depositType", depositType);
     formData.append("depositValue", depositValue);
     blockedDates.forEach((d) => formData.append("blockedDates", d));
@@ -109,9 +177,12 @@ export default function SettingsPage() {
 
   return (
     <s-page heading="Settings">
-      <s-button slot="primary-action" onClick={handleSave} loading={isSaving}>
-        Save
-      </s-button>
+      <SaveBar open={isDirty}>
+        <button variant="primary" onClick={handleSave} loading={isSaving ? "" : undefined}>
+          Save
+        </button>
+        <button onClick={handleDiscard}>Discard</button>
+      </SaveBar>
       <PlanCard />
 
       {/* General */}
@@ -121,16 +192,8 @@ export default function SettingsPage() {
         </s-paragraph>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            <label htmlFor="timezone" style={{ fontSize: "14px", fontWeight: 500 }}>Timezone</label>
-            <select id="timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)} style={selectStyle}>
-              <option value="Asia/Dhaka">Asia/Dhaka</option>
-              <option value="Asia/Kolkata">Asia/Kolkata</option>
-              <option value="Asia/Dubai">Asia/Dubai</option>
-              <option value="Europe/London">Europe/London</option>
-              <option value="America/New_York">America/New_York</option>
-              <option value="America/Los_Angeles">America/Los_Angeles</option>
-              <option value="UTC">UTC</option>
-            </select>
+            <label style={{ fontSize: "14px", fontWeight: 500 }}>Timezone</label>
+            <TimezoneSelect value={timezone} onChange={setTimezone} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             <label htmlFor="time-format" style={{ fontSize: "14px", fontWeight: 500 }}>Time Format</label>
@@ -156,34 +219,10 @@ export default function SettingsPage() {
             </select>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            <label htmlFor="from-price" style={{ fontSize: "14px", fontWeight: 500 }}>From Price</label>
-            <select id="from-price" value={fromPrice} onChange={(e) => setFromPrice(e.target.value)} style={selectStyle}>
-              <option value="automatic">Automatic</option>
-              <option value="minimum">Minimum</option>
-              <option value="minimum_per_day">Minimum / day</option>
-              <option value="disabled">Disabled</option>
-            </select>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             <label htmlFor="display-calendar" style={{ fontSize: "14px", fontWeight: 500 }}>Display Calendar</label>
             <select id="display-calendar" value={displayCalendar} onChange={(e) => setDisplayCalendar(e.target.value)} style={selectStyle}>
               <option value="default">Default</option>
               <option value="always_open">Always Open</option>
-            </select>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            <label htmlFor="quantity-position" style={{ fontSize: "14px", fontWeight: 500 }}>Quantity position</label>
-            <select id="quantity-position" value={quantityPosition} onChange={(e) => setQuantityPosition(e.target.value)} style={selectStyle}>
-              <option value="product_and_calendar">On product page and calendar</option>
-              <option value="product_page">On product page</option>
-              <option value="calendar">On calendar</option>
-            </select>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            <label htmlFor="start-calendar" style={{ fontSize: "14px", fontWeight: 500 }}>Start Calendar</label>
-            <select id="start-calendar" value={startCalendar} onChange={(e) => setStartCalendar(e.target.value)} style={selectStyle}>
-              <option value="current_date">On current date</option>
-              <option value="first_available">First available date</option>
             </select>
           </div>
         </div>
@@ -196,43 +235,46 @@ export default function SettingsPage() {
           able to book rentals on these dates.
         </s-paragraph>
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
-              <label htmlFor="block-date" style={{ fontSize: "14px", fontWeight: 500 }}>
-                Select date
-              </label>
-              <input
-                id="block-date"
-                type="date"
-                value={datePickerValue}
-                onChange={(e) => setDatePickerValue(e.target.value)}
-                style={{
-                  padding: "8px 12px",
-                  border: "1px solid #c9cccf",
-                  borderRadius: "8px",
-                  fontSize: "14px",
-                  width: "100%",
-                  boxSizing: "border-box",
-                  background: "#fff",
-                }}
-              />
-            </div>
-            <button
-              onClick={addBlockedDate}
-              style={{
-                padding: "8px 16px",
-                background: "#008060",
-                color: "#fff",
-                border: "none",
-                borderRadius: "8px",
-                fontSize: "14px",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
+          <InlineStack gap="200" blockAlign="end" wrap={false}>
+            <Box minWidth="276px">
+              <Popover
+                active={popoverActive}
+                autofocusTarget="none"
+                preferredAlignment="left"
+                fullWidth
+                preferInputActivator={false}
+                preferredPosition="below"
+                preventCloseOnChildOverlayClick
+                onClose={handlePopoverClose}
+                activator={
+                  <TextField
+                    role="combobox"
+                    label="Select date"
+                    prefix={<Icon source={CalendarIcon} />}
+                    value={formattedPickerValue}
+                    onFocus={() => setPopoverActive(true)}
+                    onChange={() => {}}
+                    autoComplete="off"
+                    placeholder="YYYY-MM-DD"
+                  />
+                }
+              >
+                <Card ref={datePickerRef}>
+                  <DatePicker
+                    month={month}
+                    year={year}
+                    selected={selectedDate}
+                    onMonthChange={handleMonthChange}
+                    onChange={handleDateSelection}
+                    disableDatesBefore={new Date()}
+                  />
+                </Card>
+              </Popover>
+            </Box>
+            <Button onClick={addBlockedDate} disabled={!selectedDate}>
               Add date
-            </button>
-          </div>
+            </Button>
+          </InlineStack>
           {blockedDates.length > 0 ? (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
               {blockedDates.map((date) => (

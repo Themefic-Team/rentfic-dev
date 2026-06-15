@@ -10,18 +10,32 @@
 
 {% if request.page_type == 'product' and product.metafields.rentfic.is_apartment == 'true' %}
 <style>
+  /* hide add-to-cart, sold-out, quantity, and payment buttons — NOT the price */
   .product-form__buttons,
   .product-form__quantity,
   .quantity,
   .product__quantity,
   [class*="quantity-wrapper"],
   .product-form__submit,
+  .product-form__submit--unavailable,
   button[name="add"],
+  button[name="add"][disabled],
   [data-type="add-to-cart-button"],
   .shopify-payment-button,
-  .product-form__payment-button { display: none !important; }
+  .product-form__payment-button,
+  .btn--sold-out,
+  .button--sold-out { display: none !important; }
 </style>
 {% endif %}
+
+{% comment %} Fallback: if rentfic injects a widget, hide the native sold-out / add-to-cart button via JS {% endcomment %}
+<script>
+  document.addEventListener('rentfic:ready', function () {
+    document
+      .querySelectorAll('button[name="add"], .product-form__submit, .shopify-payment-button')
+      .forEach(function (el) { el.style.setProperty('display', 'none', 'important'); });
+  });
+</script>
 
 {{ 'rentfic-booking.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'rentfic-booking.js' | asset_url }}" defer></script>

@@ -1,6 +1,8 @@
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { AppProvider as PolarisProvider } from "@shopify/polaris";
+import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
@@ -85,15 +87,17 @@ export default function App() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-app-nav>
-        <s-link href="/app">Dashboard</s-link>
-        <s-link href="/app/apartments">Apartments Settings</s-link>
-        <s-link href="/app/settings">Global Settings</s-link>
-        <s-link href="/app/booking">Booking</s-link>
-        <s-link href="/app/notifications">Notifications</s-link>
-        <s-link href="/app/subscribtion">Subscription</s-link>
-      </s-app-nav>
-      <Outlet />
+      <PolarisProvider i18n={enTranslations}>
+        <s-app-nav>
+          <s-link href="/app">Dashboard</s-link>
+          <s-link href="/app/apartments">Apartments Settings</s-link>
+          <s-link href="/app/settings">Global Settings</s-link>
+          <s-link href="/app/booking">Booking</s-link>
+          <s-link href="/app/notifications">Notifications</s-link>
+          <s-link href="/app/subscribtion">Subscription</s-link>
+        </s-app-nav>
+        <Outlet />
+      </PolarisProvider>
     </AppProvider>
   );
 }

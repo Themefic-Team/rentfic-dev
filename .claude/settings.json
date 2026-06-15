@@ -18,7 +18,21 @@
       "PowerShell(npm list docx 2>$null)",
       "PowerShell(npm install --save-dev docx --prefix \"D:\\\\shopify-app\\\\rentfic-dev\" --silent 2>&1)",
       "PowerShell(npm list docx --prefix \"D:\\\\shopify-app\\\\rentfic-dev\" 2>$null)",
-      "PowerShell(\\(Get-Item \"D:\\\\shopify-app\\\\rentfic-dev\\\\docs\\\\QA_TESTING.docx\"\\).Length / 1KB)"
+      "PowerShell(\\(Get-Item \"D:\\\\shopify-app\\\\rentfic-dev\\\\docs\\\\QA_TESTING.docx\"\\).Length / 1KB)",
+      "Bash(node -e \"const m = require\\('./node_modules/@shopify/app-bridge-react'\\); console.log\\(Object.keys\\(m\\).filter\\(k => /save|bar|Save|Bar/i.test\\(k\\)\\)\\)\")",
+      "Bash(node -e \"const {SaveBar} = require\\('./node_modules/@shopify/app-bridge-react'\\); console.log\\(typeof SaveBar, SaveBar?.toString?.\\(\\).slice\\(0,200\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"const p = require\\('@shopify/polaris/package.json'\\); console.log\\(p.version\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import docx; print\\('ok'\\)\")",
+      "Bash(python3 -m pip install python-docx)",
+      "Bash(python3 docs/gen_qa.py)",
+      "Bash(del \"d:\\\\shopify-app\\\\rentfic-dev\\\\docs\\\\gen_qa.py\")",
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force -Confirm:$false)"
+    ],
+    "additionalDirectories": [
+      "D:\\shopify-app\\rentfic-dev\\node_modules\\.prisma\\client"
     ]
   }
 }

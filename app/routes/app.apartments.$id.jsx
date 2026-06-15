@@ -8,6 +8,8 @@ import {
 } from "react-router";
 import { redirect } from "react-router";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
+import { Popover, DatePicker, TextField, Icon } from "@shopify/polaris";
+import { CalendarIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
@@ -69,35 +71,55 @@ export const loader = async ({ request, params }) => {
 // ─── Action ──────────────────────────────────────────────────────────────────
 
 async function syncVariantPrice(admin, productId, price) {
-  if (!price) return;
   const gid = productId.startsWith('gid://') ? productId : `gid://shopify/Product/${productId}`;
 
   const res = await admin.graphql(
     `#graphql
     query GetFirstVariant($id: ID!) {
-      product(id: $id) { variants(first: 1) { edges { node { id } } } }
+      product(id: $id) {
+        variants(first: 1) {
+          edges { node { id inventoryItem { id } } }
+        }
+      }
     }`,
     { variables: { id: gid } }
   );
   const json = await res.json();
-  const variantId = json?.data?.product?.variants?.edges?.[0]?.node?.id;
+  const variantNode    = json?.data?.product?.variants?.edges?.[0]?.node;
+  const variantId      = variantNode?.id;
+  const inventoryItemId = variantNode?.inventoryItem?.id;
   if (!variantId) return;
 
+  // Set inventoryPolicy to CONTINUE so the product is never "Sold out"
+  const variantInput = {
+    id: variantId,
+    inventoryPolicy: "CONTINUE",
+    ...(price ? { price: price.toFixed(2) } : {}),
+  };
   await admin.graphql(
     `#graphql
-    mutation BulkUpdatePrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+    mutation BulkUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
       productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants { id price }
+        productVariants { id price inventoryPolicy }
         userErrors { field message }
       }
     }`,
-    {
-      variables: {
-        productId: gid,
-        variants: [{ id: variantId, price: price.toFixed(2) }],
-      },
-    }
+    { variables: { productId: gid, variants: [variantInput] } }
   );
+
+  // Disable inventory tracking so Shopify never marks the product sold out
+  if (inventoryItemId) {
+    await admin.graphql(
+      `#graphql
+      mutation DisableInventoryTracking($id: ID!) {
+        inventoryItemUpdate(id: $id, input: { tracked: false }) {
+          inventoryItem { id tracked }
+          userErrors { field message }
+        }
+      }`,
+      { variables: { id: inventoryItemId } }
+    );
+  }
 }
 
 async function setRentficMetafields(admin, productId, settings = {}) {
@@ -170,13 +192,12 @@ export const action = async ({ request, params }) => {
     // discounts
     discountedDates: JSON.parse(fd.get("discountedDates") || "[]"),
     conditionalDiscounts: JSON.parse(fd.get("conditionalDiscounts") || "[]"),
-    // payment
-    payNowEnabled: fd.get("payNowEnabled") === "true",
-    payNowPercent: fd.get("payNowPercent") ? parseFloat(fd.get("payNowPercent")) : null,
     // deposit
     depositEnabled: fd.get("depositEnabled") === "true",
     depositType: fd.get("depositType") || "percent",
     depositAmount: fd.get("depositAmount") ? parseFloat(fd.get("depositAmount")) : null,
+    // balance collection
+    balanceAutoInvoice: fd.get("balanceAutoInvoice") === "true",
   };
 
   if (params.id === "new") {
@@ -206,7 +227,7 @@ function Toggle({ enabled, onChange }) {
       onClick={() => onChange(!enabled)}
       style={{
         width: 44, height: 24, borderRadius: 12, border: "none", padding: 0,
-        background: enabled ? "#008060" : "#c9cccf",
+        background: enabled ? "#202223" : "#c9cccf",
         position: "relative", cursor: "pointer", flexShrink: 0,
         transition: "background 0.2s",
       }}
@@ -247,6 +268,82 @@ function ToggleRow({ label, hint, enabled, onChange }) {
         {hint && <div style={{ fontSize: 12, color: "#6d7175", marginTop: 2 }}>{hint}</div>}
       </div>
       <Toggle enabled={enabled} onChange={onChange} />
+    </div>
+  );
+}
+
+// ─── Date Picker Field ───────────────────────────────────────────────────────
+
+function DatePickerField({ label, hint, value, onChange }) {
+  const [popoverActive, setPopoverActive] = useState(false);
+  const [{ month, year }, setDateState] = useState(() => {
+    const d = value ? new Date(value + "T12:00:00") : new Date();
+    return { month: d.getMonth(), year: d.getFullYear() };
+  });
+  const datePickerRef = useRef(null);
+  const selectedDate = value ? new Date(value + "T12:00:00") : null;
+
+  function nodeContainsDescendant(root, node) {
+    if (root === node) return true;
+    let parent = node.parentNode;
+    while (parent) {
+      if (parent === root) return true;
+      parent = parent.parentNode;
+    }
+    return false;
+  }
+
+  const handlePopoverClose = useCallback(({ relatedTarget }) => {
+    if (
+      relatedTarget instanceof Node &&
+      datePickerRef.current &&
+      nodeContainsDescendant(datePickerRef.current, relatedTarget)
+    ) return;
+    setPopoverActive(false);
+  }, []);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {label && <label style={{ fontSize: 14, fontWeight: 500, color: "#202223" }}>{label}</label>}
+      {hint && <span style={{ fontSize: 12, color: "#6d7175", marginTop: -2 }}>{hint}</span>}
+      <Popover
+        active={popoverActive}
+        autofocusTarget="none"
+        preferredAlignment="left"
+        preferInputActivator={false}
+        preferredPosition="below"
+        preventCloseOnChildOverlayClick
+        onClose={handlePopoverClose}
+        activator={
+          <TextField
+            role="combobox"
+            label=""
+            labelHidden
+            prefix={<Icon source={CalendarIcon} />}
+            value={value || ""}
+            onFocus={() => setPopoverActive(true)}
+            onChange={() => {}}
+            autoComplete="off"
+            placeholder="YYYY-MM-DD"
+          />
+        }
+      >
+        <div style={{ width: 276, padding: 8 }} ref={datePickerRef}>
+          <DatePicker
+            month={month}
+            year={year}
+            selected={selectedDate}
+            onMonthChange={(m, y) => setDateState({ month: m, year: y })}
+            onChange={({ end }) => {
+              const y = end.getFullYear();
+              const m = String(end.getMonth() + 1).padStart(2, "0");
+              const d = String(end.getDate()).padStart(2, "0");
+              onChange(`${y}-${m}-${d}`);
+              setPopoverActive(false);
+            }}
+          />
+        </div>
+      </Popover>
     </div>
   );
 }
@@ -302,11 +399,10 @@ export default function ApartmentEditPage() {
       additionalFees: s.additionalFees ?? [],
       discountedDates: s.discountedDates ?? [],
       conditionalDiscounts: s.conditionalDiscounts ?? [],
-      payNowEnabled: s.payNowEnabled ?? false,
-      payNowPercent: s.payNowPercent?.toString() ?? "100",
       depositEnabled: s.depositEnabled ?? false,
       depositType: s.depositType ?? "percent",
       depositAmount: s.depositAmount?.toString() ?? "",
+      balanceAutoInvoice: s.balanceAutoInvoice ?? false,
     };
   }
 
@@ -339,11 +435,10 @@ export default function ApartmentEditPage() {
   const [additionalFees, setAdditionalFees] = useState(o.additionalFees);
   const [discountedDates, setDiscountedDates] = useState(o.discountedDates);
   const [conditionalDiscounts, setConditionalDiscounts] = useState(o.conditionalDiscounts);
-  const [payNowEnabled, setPayNowEnabled] = useState(o.payNowEnabled);
-  const [payNowPercent, setPayNowPercent] = useState(o.payNowPercent);
   const [depositEnabled, setDepositEnabled] = useState(o.depositEnabled);
   const [depositType, setDepositType] = useState(o.depositType);
   const [depositAmount, setDepositAmount] = useState(o.depositAmount);
+  const [balanceAutoInvoice, setBalanceAutoInvoice] = useState(o.balanceAutoInvoice);
   const [isDirty, setIsDirty] = useState(false);
 
   const [amenityInput, setAmenityInput] = useState("");
@@ -384,9 +479,9 @@ export default function ApartmentEditPage() {
     setMaxGuests(o.maxGuests); setStockQuantity(o.stockQuantity);
     setAddress(o.address); setCity(o.city); setCountry(o.country);
     setAmenities(o.amenities); setAdditionalFees(o.additionalFees); setDiscountedDates(o.discountedDates);
-    setConditionalDiscounts(o.conditionalDiscounts); setPayNowEnabled(o.payNowEnabled);
-    setPayNowPercent(o.payNowPercent); setDepositEnabled(o.depositEnabled);
+    setConditionalDiscounts(o.conditionalDiscounts); setDepositEnabled(o.depositEnabled);
     setDepositType(o.depositType); setDepositAmount(o.depositAmount);
+    setBalanceAutoInvoice(o.balanceAutoInvoice);
     setIsDirty(false);
   };
 
@@ -428,11 +523,10 @@ export default function ApartmentEditPage() {
     fd.append("additionalFees", JSON.stringify(additionalFees));
     fd.append("discountedDates", JSON.stringify(discountedDates));
     fd.append("conditionalDiscounts", JSON.stringify(conditionalDiscounts));
-    fd.append("payNowEnabled", String(payNowEnabled));
-    fd.append("payNowPercent", payNowPercent);
     fd.append("depositEnabled", String(depositEnabled));
     fd.append("depositType", depositType);
     fd.append("depositAmount", depositAmount);
+    fd.append("balanceAutoInvoice", String(balanceAutoInvoice));
     submit(fd, { method: "POST" });
   };
 
@@ -506,7 +600,7 @@ export default function ApartmentEditPage() {
                 style={{
                   display: "inline-block",
                   padding: "9px 20px",
-                  background: "#008060",
+                  background: "#202223",
                   color: "#fff",
                   borderRadius: 8,
                   fontSize: 14,
@@ -575,14 +669,14 @@ export default function ApartmentEditPage() {
                   onClick={() => { setBookingType(value); setIsDirty(true); }}
                   style={{
                     padding:"16px 14px", textAlign:"left", cursor:"pointer",
-                    border:`2px solid ${bookingType === value ? "#008060" : "#e1e3e5"}`,
+                    border:`2px solid ${bookingType === value ? "#202223" : "#e1e3e5"}`,
                     borderRadius:10,
-                    background: bookingType === value ? "#f0faf6" : "#fff",
+                    background: bookingType === value ? "#f6f6f7" : "#fff",
                     transition:"all 0.15s",
                   }}
                 >
                   <div style={{ fontSize:20, marginBottom:6 }}>{icon}</div>
-                  <div style={{ fontSize:14, fontWeight:600, color: bookingType === value ? "#008060" : "#202223", marginBottom:4 }}>{title}</div>
+                  <div style={{ fontSize:14, fontWeight:600, color: bookingType === value ? "#202223" : "#202223", marginBottom:4 }}>{title}</div>
                   <div style={{ fontSize:12, color:"#6d7175", lineHeight:1.5 }}>{desc}</div>
                 </button>
               ))}
@@ -621,9 +715,14 @@ export default function ApartmentEditPage() {
           <p style={{ margin:"0 0 14px", fontSize:13, color:"#6d7175" }}>
             Mark specific dates as unavailable. Blocked dates cannot be booked by customers.
           </p>
-          <div style={{ display:"flex", gap:10, marginBottom:14 }}>
-            <Inp type="date" value={blockDateInput} onChange={(e) => setBlockDateInput(e.target.value)} style={{ flex:1 }} />
-            <button type="button" onClick={addBlockedDate} style={primaryBtn}>+ Block Date</button>
+          <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"flex-end" }}>
+            <div style={{ flex:1 }}>
+              <DatePickerField
+                value={blockDateInput}
+                onChange={(val) => setBlockDateInput(val)}
+              />
+            </div>
+            <button type="button" onClick={addBlockedDate} style={{ ...primaryBtn, height:36 }}>+ Block Date</button>
           </div>
           {blockedDates.length > 0 ? (
             <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
@@ -644,12 +743,18 @@ export default function ApartmentEditPage() {
         {/* ══════════════ AVAILABILITY ══════════════ */}
         <s-section heading="Availability">
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
-            <Field label="Calendar Start" hint="Earliest bookable date">
-              <Inp type="date" value={calendarStartDate} onChange={mark(setCalendarStartDate)} />
-            </Field>
-            <Field label="Calendar End" hint="Latest bookable date">
-              <Inp type="date" value={calendarEndDate} onChange={mark(setCalendarEndDate)} />
-            </Field>
+            <DatePickerField
+              label="Calendar Start"
+              hint="Earliest bookable date"
+              value={calendarStartDate}
+              onChange={(val) => { setCalendarStartDate(val); setIsDirty(true); }}
+            />
+            <DatePickerField
+              label="Calendar End"
+              hint="Latest bookable date"
+              value={calendarEndDate}
+              onChange={(val) => { setCalendarEndDate(val); setIsDirty(true); }}
+            />
             <Field label="Check-in Time">
               <Inp type="time" value={checkInTime} onChange={mark(setCheckInTime)} />
             </Field>
@@ -692,7 +797,7 @@ export default function ApartmentEditPage() {
                   }}>
                     <div style={{ width:100, fontSize:14, fontWeight:500, color: day.enabled ? "#202223" : "#adb5bd" }}>{label}</div>
                     <Toggle enabled={day.enabled} onChange={(v) => updateDay(key, "enabled", v)} />
-                    <span style={{ fontSize:12, fontWeight:700, width:28, color: day.enabled ? "#008060" : "#adb5bd" }}>
+                    <span style={{ fontSize:12, fontWeight:700, width:28, color: day.enabled ? "#202223" : "#adb5bd" }}>
                       {day.enabled ? "ON" : "OFF"}
                     </span>
                   </div>
@@ -860,9 +965,14 @@ export default function ApartmentEditPage() {
               <div style={{ fontSize:14, fontWeight:600, color:"#202223", marginBottom:14 }}>
                 {discountedDates.find((d) => d.id === editingDiscount.id) ? "Edit Discount Group" : "New Discount Group"}
               </div>
-              <div style={{ display:"flex", gap:10, marginBottom:12 }}>
-                <Inp type="date" value={discountDateInput} onChange={(e) => setDiscountDateInput(e.target.value)} style={{ flex:1 }} />
-                <button type="button" onClick={addDateToDiscount} style={primaryBtn}>+ Add Date</button>
+              <div style={{ display:"flex", gap:10, marginBottom:12, alignItems:"flex-end" }}>
+                <div style={{ flex:1 }}>
+                  <DatePickerField
+                    value={discountDateInput}
+                    onChange={(val) => setDiscountDateInput(val)}
+                  />
+                </div>
+                <button type="button" onClick={addDateToDiscount} style={{ ...primaryBtn, height:36 }}>+ Add Date</button>
               </div>
               {editingDiscount.dates.length > 0 && (
                 <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:14 }}>
@@ -963,27 +1073,6 @@ export default function ApartmentEditPage() {
           <button type="button" onClick={addRule} style={outlineBtn}>+ Add Discount Rule</button>
         </s-section>
 
-        {/* ══════════════ PAY NOW / ONLINE ══════════════ */}
-        <s-section heading="Pay Now / Online Payment">
-          <ToggleRow
-            label="Enable Online Payment"
-            hint="Customers pay online at the time of booking"
-            enabled={payNowEnabled}
-            onChange={touch(setPayNowEnabled)}
-          />
-          {payNowEnabled && (
-            <div style={{ marginTop:16, paddingTop:16, borderTop:"1px solid #f1f1f1" }}>
-              <Field label="Percentage to Pay Now" hint="100% = full payment upfront · 50% = half now, half later">
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <Inp type="number" min={1} max={100} value={payNowPercent} onChange={mark(setPayNowPercent)}
-                    placeholder="100" style={{ maxWidth:120 }} />
-                  <span style={{ fontSize:14, color:"#6d7175" }}>%</span>
-                </div>
-              </Field>
-            </div>
-          )}
-        </s-section>
-
         {/* ══════════════ DEPOSIT ══════════════ */}
         <s-section heading="Deposit">
           <ToggleRow
@@ -1014,6 +1103,25 @@ export default function ApartmentEditPage() {
                   </div>
                 </Field>
               </div>
+
+              {/* Balance Collection */}
+              <div style={{ marginTop:20, paddingTop:16, borderTop:"1px solid #f1f1f1" }}>
+                <ToggleRow
+                  label="Auto-create balance invoice"
+                  hint="When the deposit order is confirmed, automatically create a Shopify draft order for the remaining balance so you can send a payment link to the customer"
+                  enabled={balanceAutoInvoice}
+                  onChange={touch(setBalanceAutoInvoice)}
+                />
+                {balanceAutoInvoice && (
+                  <div style={{ marginTop:12, padding:"12px 14px", background:"#f6f6f7", borderRadius:8, fontSize:13, color:"#6d7175", lineHeight:1.6 }}>
+                    <strong style={{ color:"#202223" }}>How it works:</strong><br />
+                    1. Customer pays deposit at checkout<br />
+                    2. App detects the order and creates a draft order in Shopify for the remaining balance<br />
+                    3. A <strong style={{ color:"#202223" }}>Send Invoice</strong> button appears on the booking — click it to email the payment link to the customer<br />
+                    4. Customer pays the balance via the link — booking is fully settled
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </s-section>
@@ -1024,11 +1132,11 @@ export default function ApartmentEditPage() {
           {amenities.length > 0 && (
             <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:14 }}>
               {amenities.map((item) => (
-                <span key={item} style={{ ...tagStyle, background:"#f0faf6", border:"1px solid #008060", color:"#008060" }}>
+                <span key={item} style={{ ...tagStyle, background:"#f6f6f7", border:"1px solid #202223", color:"#202223" }}>
                   {item}
                   <button type="button"
                     onClick={() => { setAmenities((p) => p.filter((a) => a !== item)); setIsDirty(true); }}
-                    style={{ ...tagX, color:"#008060" }}>×</button>
+                    style={{ ...tagX, color:"#202223" }}>×</button>
                 </span>
               ))}
             </div>
@@ -1107,14 +1215,14 @@ const tagX = {
 };
 
 const primaryBtn = {
-  padding:"8px 16px", background:"#008060", color:"#fff",
+  padding:"8px 16px", background:"#202223", color:"#fff",
   border:"none", borderRadius:8, fontSize:14, fontWeight:600,
   cursor:"pointer", whiteSpace:"nowrap",
 };
 
 const outlineBtn = {
-  padding:"8px 16px", background:"#fff", color:"#008060",
-  border:"1px solid #008060", borderRadius:8, fontSize:14, fontWeight:600,
+  padding:"8px 16px", background:"#fff", color:"#202223",
+  border:"1px solid #202223", borderRadius:8, fontSize:14, fontWeight:600,
   cursor:"pointer", whiteSpace:"nowrap",
 };
 

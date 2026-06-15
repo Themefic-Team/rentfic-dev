@@ -2,20 +2,36 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request, params }) => {
-  const { session } = await authenticate.public.appProxy(request);
+  let session;
+  try {
+    ({ session } = await authenticate.public.appProxy(request));
+  } catch (e) {
+    console.error("[Rentfic] proxy auth error:", e?.message ?? e);
+    return Response.json({ found: false }, { status: 200 });
+  }
+
+  const shopDomain = session?.shop ?? new URL(request.url).searchParams.get("shop");
+  if (!shopDomain) return Response.json({ found: false }, { status: 200 });
+
   const productGid = `gid://shopify/Product/${params.productId}`;
 
-  const [apartment, shop] = await Promise.all([
-    prisma.apartment.findFirst({
-      where: { shop: session.shop, productId: productGid },
-    }),
-    prisma.shop.findUnique({
-      where: { shop: session.shop },
-      select: { settings: true },
-    }),
-  ]);
+  let apartment, shop;
+  try {
+    [apartment, shop] = await Promise.all([
+      prisma.apartment.findFirst({
+        where: { shop: shopDomain, productId: productGid },
+      }),
+      prisma.shop.findUnique({
+        where: { shop: shopDomain },
+        select: { settings: true },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[Rentfic] proxy DB error:", e?.message ?? e);
+    return Response.json({ found: false }, { status: 200 });
+  }
 
-  if (!apartment) {
+  if (!apartment || apartment.status !== "active") {
     return Response.json({ found: false });
   }
 
@@ -65,8 +81,6 @@ export const loader = async ({ request, params }) => {
       depositEnabled: s.depositEnabled ?? false,
       depositType: s.depositType ?? "percent",
       depositAmount: s.depositAmount ?? null,
-      payNowEnabled: s.payNowEnabled ?? false,
-      payNowPercent: s.payNowPercent ?? 100,
     },
     shopSettings: {
       timezone: ss.timezone ?? "UTC",

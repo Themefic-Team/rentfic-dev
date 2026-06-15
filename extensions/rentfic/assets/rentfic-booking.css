@@ -153,6 +153,11 @@
   cursor: default;
 }
 
+.rf-cell.out-of-bounds {
+  color: var(--rf-disabled);
+  cursor: default;
+}
+
 .rf-cell.disabled {
   color: var(--rf-disabled);
   cursor: not-allowed;

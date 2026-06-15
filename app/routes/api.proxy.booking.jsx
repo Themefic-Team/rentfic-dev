@@ -154,17 +154,34 @@ export const action = async ({ request }) => {
 
   const finalTotal = calcTotal(apartment, parsedNights, guests || {}, parsedQuantity);
 
+  // Deposit calculation — charge only deposit now if enabled
+  let chargeNow = finalTotal;
+  let depositCharged = null;
+  const depositEnabled = s.depositEnabled ?? false;
+  const depositType    = s.depositType ?? "percent";
+  const depositAmt     = s.depositAmount ? parseFloat(s.depositAmount) : null;
+
+  if (depositEnabled && depositAmt) {
+    if (depositType === "percent") {
+      depositCharged = Math.round(finalTotal * (depositAmt / 100) * 100) / 100;
+    } else {
+      depositCharged = Math.min(depositAmt, finalTotal);
+    }
+    chargeNow = depositCharged;
+  }
+
   const booking = await prisma.booking.create({
     data: {
-      shop:         session.shop,
+      shop:          session.shop,
       apartmentId,
-      productId:    apartment.productId,
-      productTitle: apartment.productTitle,
+      productId:     apartment.productId,
+      productTitle:  apartment.productTitle,
       startDate,
-      endDate:      endDate || startDate,
-      nights:       parsedNights,
-      totalPrice:   finalTotal,
-      status:       "pending",
+      endDate:       endDate || startDate,
+      nights:        parsedNights,
+      totalPrice:    finalTotal,
+      depositAmount: depositCharged,
+      status:        "pending",
       lineItemProperties: {
         bookingType,
         quantity: parsedQuantity,
@@ -174,17 +191,20 @@ export const action = async ({ request }) => {
     },
   });
 
-  // Update variant price to the calculated total — widget adds to cart right after
+  // Update variant price to chargeNow (deposit or full total) — widget adds to cart right after
   const productGid = apartment.productId.startsWith("gid://")
     ? apartment.productId
     : `gid://shopify/Product/${apartment.productId}`;
 
-  await updateVariantPrice(session.shop, productGid, finalTotal);
+  await updateVariantPrice(session.shop, productGid, chargeNow);
 
   return Response.json({
-    success:    true,
-    bookingId:  booking.id,
+    success:        true,
+    bookingId:      booking.id,
     finalTotal,
-    resetPrice: apartment.pricePerNight || 0,
+    chargeNow,
+    isDeposit:      depositCharged !== null,
+    depositCharged,
+    resetPrice:     apartment.pricePerNight || 0,
   });
 };

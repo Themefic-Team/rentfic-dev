@@ -100,6 +100,7 @@
         this.calOpen      = (this.shopSettings.displayCalendar || 'always_open') !== 'default';
         this._setInitialViewMonth();
         this._render();
+        document.dispatchEvent(new CustomEvent('rentfic:ready'));
       } catch (err) {
         console.error('[Rentfic] widget error:', err);
         this.container.innerHTML = `<div style="padding:16px;font-size:13px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">Booking widget failed to load. Check console for details.</div>`;
@@ -165,6 +166,31 @@
       return this._isInBounds(date) && !this._isBlocked(date) && this._isWeekdayOn(date);
     }
 
+    // Visual selectability — extends _isSelectable with state-aware min/max day constraints
+    _isCalendarSelectable(date) {
+      if (!this._isSelectable(date)) return false;
+      const { bookingType, minDays, maxDays } = this.apartment;
+
+      // Range: once start is picked but end isn't, constrain the valid end-date window.
+      // Disabled dates inside the window are skipped — they don't count toward min/max.
+      if (bookingType === 'range' && this.startDate && !this.endDate) {
+        // The start date itself stays clickable (so user can click it to clear the selection)
+        if (this._toStr(date) === this._toStr(this.startDate)) return true;
+        if (date < this.startDate) return false;
+        const n = this._countSelectableNights(this.startDate, date);
+        if (minDays && n < minDays) return false;
+        if (maxDays && n > maxDays) return false;
+      }
+
+      // Multiple: once the limit is reached, only already-selected dates remain clickable (for deselection)
+      if (bookingType === 'multiple' && maxDays && this.selectedDates.length >= maxDays) {
+        const s = this._toStr(date);
+        return this.selectedDates.some(d => this._toStr(d) === s);
+      }
+
+      return true;
+    }
+
     _isSelected(date) {
       const s = this._toStr(date);
       const { bookingType } = this.apartment;
@@ -185,9 +211,21 @@
       return d && this._toStr(date) === this._toStr(d);
     }
 
+    // Count selectable (non-blocked, weekday-on) nights from start (inclusive) to end (exclusive).
+    // Disabled dates inside a range are skipped and don't count toward min/max or pricing.
+    _countSelectableNights(start, end) {
+      let count = 0;
+      const d = new Date(start);
+      while (d < end) {
+        if (this._isSelectable(d)) count++;
+        d.setDate(d.getDate() + 1);
+      }
+      return count;
+    }
+
     _calcNights() {
       const { bookingType } = this.apartment;
-      if (bookingType === 'range'    && this.startDate && this.endDate) return this._nights(this.startDate, this.endDate);
+      if (bookingType === 'range'    && this.startDate && this.endDate) return this._countSelectableNights(this.startDate, this.endDate);
       if (bookingType === 'single'   && this.startDate)                 return 1;
       if (bookingType === 'multiple')                                   return this.selectedDates.length;
       return 0;
@@ -214,14 +252,33 @@
       });
     }
 
+    _getSelectedDateStrings() {
+      const { bookingType } = this.apartment;
+      const dates = [];
+      if (bookingType === 'single' && this.startDate) {
+        dates.push(this._toStr(this.startDate));
+      } else if (bookingType === 'range' && this.startDate && this.endDate) {
+        const d = new Date(this.startDate);
+        while (d < this.endDate) {
+          dates.push(this._toStr(d));
+          d.setDate(d.getDate() + 1);
+        }
+      } else if (bookingType === 'multiple') {
+        this.selectedDates.forEach(d => dates.push(this._toStr(d)));
+      }
+      return dates;
+    }
+
     _calcDiscount(base, nights) {
-      const rules = this.apartment.conditionalDiscounts || [];
       let total = 0;
+
+      // Rule-based conditional discounts
+      const rules = this.apartment.conditionalDiscounts || [];
       for (const rule of rules) {
         const cv = parseFloat(rule.conditionValue) || 0;
         let met = false;
-        if (rule.condition === 'minDays' && nights >= cv) met = true;
-        if (rule.condition === 'minTotal'  && base >= cv)   met = true;
+        if (rule.condition === 'minDays'   && nights >= cv)              met = true;
+        if (rule.condition === 'minTotal'  && base >= cv)                met = true;
         if (rule.condition === 'minQty'    && this._totalGuests() >= cv) met = true;
         if (met) {
           let d = rule.discountType === 'percent'
@@ -231,6 +288,25 @@
           total += d;
         }
       }
+
+      // Date-specific discounts
+      const discountedGroups = this.apartment.discountedDates || [];
+      if (discountedGroups.length > 0 && nights > 0) {
+        const selectedStrs    = this._getSelectedDateStrings();
+        const pricePerNight   = this.apartment.pricePerNight || 0;
+        for (const group of discountedGroups) {
+          const groupDates     = group.dates || [];
+          const matchingNights = selectedStrs.filter(s => groupDates.includes(s)).length;
+          if (matchingNights > 0) {
+            const matchBase = this.quantity * matchingNights * pricePerNight;
+            const disc = group.type === 'percent'
+              ? matchBase * (parseFloat(group.value) / 100)
+              : parseFloat(group.value) * matchingNights;
+            total += disc;
+          }
+        }
+      }
+
       return total;
     }
 
@@ -283,11 +359,16 @@
         }
       } else {
         if (!this.startDate || (this.startDate && this.endDate)) {
+          // No selection yet, or both dates already set — start fresh
           this.startDate = date; this.endDate = null; this.hoverDate = null;
-        } else if (date <= this.startDate) {
+        } else if (this._toStr(date) === this._toStr(this.startDate)) {
+          // Clicking the start date again clears the entire selection
+          this.startDate = null; this.endDate = null; this.hoverDate = null;
+        } else if (date < this.startDate) {
+          // Clicking before start (shouldn't normally be reachable since those cells are disabled, but fallback)
           this.startDate = date; this.endDate = null; this.hoverDate = null;
         } else {
-          const n = this._nights(this.startDate, date);
+          const n = this._countSelectableNights(this.startDate, date);
           if (minDays && n < minDays) return;
           if (maxDays && n > maxDays) return;
           this.endDate = date; this.hoverDate = null;
@@ -322,13 +403,22 @@
 
       let hint = '';
       if      (bookingType === 'range'    && !this.startDate) hint = 'Select check-in date';
-      else if (bookingType === 'range'    && !this.endDate)   hint = minDays > 1 ? `Select check-out (min ${minDays} nights)` : 'Select check-out date';
+      else if (bookingType === 'range'    && !this.endDate) {
+        const parts = [];
+        if (minDays > 1) parts.push(`min ${minDays} nights`);
+        if (maxDays)     parts.push(`max ${maxDays} nights`);
+        hint = parts.length ? `Select check-out (${parts.join(', ')})` : 'Select check-out date';
+      }
       else if (bookingType === 'single'   && !this.startDate) hint = 'Select a date';
       else if (bookingType === 'multiple') {
+        const remaining = maxDays ? maxDays - this.selectedDates.length : null;
         const parts = [];
         if (minDays > 1) parts.push(`min ${minDays} dates`);
         if (maxDays)     parts.push(`max ${maxDays} dates`);
-        hint = parts.length ? `Select dates · ${parts.join(', ')}` : 'Select one or more dates';
+        if (remaining !== null && remaining === 0) hint = `Maximum ${maxDays} dates selected`;
+        else if (remaining !== null && remaining > 0 && this.selectedDates.length > 0)
+          hint = `${remaining} more date${remaining !== 1 ? 's' : ''} available (max ${maxDays})`;
+        else hint = parts.length ? `Select dates · ${parts.join(', ')}` : 'Select one or more dates';
       }
 
       const calDefault  = (this.shopSettings.displayCalendar || 'always_open') === 'default';
@@ -352,9 +442,11 @@
 
       this._listen();
 
-      // Keep the theme's visible price in sync with the calculated total
+      // Keep the theme's visible price in sync with the amount charged at checkout
       if (this._hasSelection()) {
-        this._syncPagePrice(this._calcTotal());
+        const total   = this._calcTotal();
+        const deposit = this._calcDeposit(total);
+        this._syncPagePrice(deposit !== null ? deposit : total);
       } else {
         this._syncPagePrice(this.apartment.pricePerNight || 0);
       }
@@ -523,15 +615,17 @@
       for (let i = 0; i < first; i++) html += '<div class="rf-cell empty"></div>';
 
       for (let d = 1; d <= days; d++) {
-        const date  = new Date(y, m, d);
-        const sel   = this._isSelectable(date);
-        const slctd = this._isSelected(date);
-        const range = this._isInRange(date);
-        const rS    = this._isRangeEdge(date, 'start');
-        const rE    = this._isRangeEdge(date, 'end');
+        const date     = new Date(y, m, d);
+        const inBounds = this._isInBounds(date);
+        const sel      = inBounds && this._isCalendarSelectable(date);
+        const slctd    = this._isSelected(date);
+        const range    = this._isInRange(date);
+        const rS       = this._isRangeEdge(date, 'start');
+        const rE       = this._isRangeEdge(date, 'end');
 
         let cls = 'rf-cell';
-        if (!sel)  cls += ' disabled';
+        if (!inBounds) cls += ' out-of-bounds';
+        else if (!sel) cls += ' disabled';
         if (slctd) cls += ' selected';
         if (range) cls += ' in-range';
         if (rS)    cls += ' range-start';
@@ -544,7 +638,7 @@
     }
 
     _renderSummary(nights, total, deposit) {
-      const { bookingType, pricePerNight, payNowEnabled, payNowPercent } = this.apartment;
+      const { bookingType, pricePerNight } = this.apartment;
       const base   = this.quantity * nights * (pricePerNight || 0);
       const fees   = this._calcFees(nights);
       const disc   = this._calcDiscount(base, nights);
@@ -553,9 +647,6 @@
       if      (bookingType === 'range'    && this.startDate && this.endDate) dateLabel = `${this._toStr(this.startDate)} &rarr; ${this._toStr(this.endDate)}`;
       else if (bookingType === 'single'   && this.startDate)                 dateLabel = this._toStr(this.startDate);
       else if (bookingType === 'multiple')                                   dateLabel = `${nights} date${nights !== 1 ? 's' : ''} selected`;
-
-      const payNow = (payNowEnabled && payNowPercent && payNowPercent < 100)
-        ? total * (payNowPercent / 100) : null;
 
       return `
         <div class="rentfic-summary">
@@ -586,12 +677,6 @@
             <div class="rf-sum-row rf-deposit">
               <span>Deposit due now</span>
               <span>${this._fmtPrice(deposit)}</span>
-            </div>
-          ` : ''}
-          ${payNow !== null ? `
-            <div class="rf-sum-row rf-deposit">
-              <span>Pay now (${payNowPercent}%)</span>
-              <span>${this._fmtPrice(payNow)}</span>
             </div>
           ` : ''}
         </div>
@@ -630,7 +715,18 @@
         if (this.apartment.bookingType === 'range') {
           cell.addEventListener('mouseenter', () => {
             if (!this.startDate || this.endDate) return;
-            this.hoverDate = this._parse(cell.dataset.date);
+            const hovered = this._parse(cell.dataset.date);
+            const { minDays, maxDays } = this.apartment;
+            // Only show hover preview for dates within the valid end-date window
+            if (hovered <= this.startDate) { this.hoverDate = null; }
+            else {
+              const n = this._countSelectableNights(this.startDate, hovered);
+              if ((minDays && n < minDays) || (maxDays && n > maxDays)) {
+                this.hoverDate = null;
+              } else {
+                this.hoverDate = hovered;
+              }
+            }
             this.container.querySelectorAll('.rf-cell[data-date]').forEach(c => {
               const d = this._parse(c.dataset.date);
               c.classList.toggle('in-range',  this._isInRange(d));
@@ -755,6 +851,10 @@
           '_booking_id':  bData.bookingId,
         };
         if (bookingDates) properties['Dates'] = bookingDates.join(', ');
+        if (bData.isDeposit) {
+          properties['Deposit Paid']  = this._fmtPrice(bData.depositCharged);
+          properties['Balance Due']   = this._fmtPrice(bData.finalTotal - bData.depositCharged);
+        }
 
         // 2. Add to cart — variant price has been set to finalTotal by the server
         const cartRes = await fetch('/cart/add.js', {

@@ -75,6 +75,9 @@ model Booking {
   nights              Int?
   totalPrice          Float?
   depositAmount       Float?
+  draftOrderId        String?
+  draftOrderUrl       String?
+  balanceStatus       String?  // pending | invoiced | paid
   status              String   @default("pending")  // pending | confirmed | cancelled
   lineItemProperties  Json?
   createdAt           DateTime @default(now())
