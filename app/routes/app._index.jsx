@@ -104,7 +104,7 @@ export default function DashboardPage() {
 
       {/* Stats */}
       <s-section heading="Overview">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
           {overviewStats.map((s) => (
             <div
               key={s.label}

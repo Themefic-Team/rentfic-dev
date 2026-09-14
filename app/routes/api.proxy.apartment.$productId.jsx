@@ -93,6 +93,7 @@ export const loader = async ({ request, params }) => {
       blockedDates: ss.blockedDates ?? [],
       depositType: ss.depositType ?? "percent",
       depositValue: ss.depositValue ?? null,
+      translate: ss.translate ?? "automatic",
     },
   });
 };

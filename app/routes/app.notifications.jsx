@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
+import { Icon } from "@shopify/polaris";
+import { SettingsIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { DEFAULT_TEMPLATES } from "../notification-defaults";
@@ -9,23 +11,25 @@ import { PlanCard } from "../components/PlanCard";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: "bookingConfirmation", label: "Booking Confirmation" },
-  { key: "bookingReminder",     label: "Booking Reminder"     },
-  { key: "checkinDay",          label: "Check-in Day"         },
-  { key: "checkoutReminder",    label: "Check-out Reminder"   },
-  { key: "bookingCancelled",    label: "Cancellation"         },
-  { key: "ownerNewBooking",     label: "New Booking Alert"    },
-  { key: "reviewRequest",       label: "Review Request"       },
+  { key: "bookingConfirmation",   label: "Booking Confirmation"    },
+  { key: "bookingReminder",       label: "Booking Reminder"        },
+  { key: "checkinDay",            label: "Check-in Day"            },
+  { key: "checkoutReminder",      label: "Check-out Reminder"      },
+  { key: "bookingCancelled",      label: "Cancellation (Guest)"    },
+  { key: "ownerBookingCancelled", label: "Cancellation (Owner)"    },
+  { key: "ownerNewBooking",       label: "New Booking Alert"       },
+  { key: "reviewRequest",         label: "Review Request"          },
 ];
 
 const TAB_META = {
-  bookingConfirmation: { recipient: "Guest",  hasTiming: false },
-  bookingReminder:     { recipient: "Guest",  hasTiming: true,  timingLabel: "Days before check-in"  },
-  checkinDay:          { recipient: "Guest",  hasTiming: false },
-  checkoutReminder:    { recipient: "Guest",  hasTiming: false },
-  bookingCancelled:    { recipient: "Guest",  hasTiming: false },
-  ownerNewBooking:     { recipient: "Owner",  hasTiming: false },
-  reviewRequest:       { recipient: "Guest",  hasTiming: true,  timingLabel: "Days after check-out"  },
+  bookingConfirmation:   { recipient: "Guest",  hasTiming: false },
+  bookingReminder:       { recipient: "Guest",  hasTiming: true,  timingLabel: "Days before check-in" },
+  checkinDay:            { recipient: "Guest",  hasTiming: false },
+  checkoutReminder:      { recipient: "Guest",  hasTiming: false },
+  bookingCancelled:      { recipient: "Guest",  hasTiming: false },
+  ownerBookingCancelled: { recipient: "Owner",  hasTiming: false },
+  ownerNewBooking:       { recipient: "Owner",  hasTiming: false },
+  reviewRequest:         { recipient: "Guest",  hasTiming: true,  timingLabel: "Days after check-out" },
 };
 
 const PARAMS = [
@@ -285,7 +289,8 @@ export default function NotificationsPage() {
                 color: "#202223",
               }}
             >
-              <span>⚙</span> Parameters
+              <Icon source={SettingsIcon} />
+              Parameters
               <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 400, color: "#6d7175" }}>
                 Click any variable to insert at cursor · To: {meta.recipient}
               </span>

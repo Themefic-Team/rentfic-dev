@@ -8,6 +8,245 @@
   const DAY_NAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const WEEK_DAYS  = ['sun','mon','tue','wed','thu','fri','sat'];
 
+  // ─── i18n dictionary ─────────────────────────────────────────────────────────
+  const I18N = {
+    en: {
+      reserveNow:      'Reserve Now',
+      selectCheckIn:   'Select check-in date',
+      selectCheckOut:  'Select check-out date',
+      selectDate:      'Select a date',
+      selectDates:     'Select one or more dates',
+      selectCheckOutN: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('min ' + min + ' nights');
+        if (max)     p.push('max ' + max + ' nights');
+        return p.length ? 'Select check-out (' + p.join(', ') + ')' : 'Select check-out date';
+      },
+      maxDatesSelected: function(n) { return 'Maximum ' + n + ' dates selected'; },
+      moreDates: function(rem, max) { return rem + ' more date' + (rem !== 1 ? 's' : '') + ' available (max ' + max + ')'; },
+      minMaxDates: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('min ' + min + ' dates');
+        if (max)     p.push('max ' + max + ' dates');
+        return 'Select dates · ' + p.join(', ');
+      },
+      hideCalendar:    '▲ Hide Calendar',
+      showCalendar:    '▼ Show Calendar',
+      whatsIncluded:   "What's included",
+      guests:          'Guests',
+      adults:          'Adults',
+      adultsAges:      'Ages 13+',
+      children:        'Children',
+      childrenAges:    'Ages 2–12',
+      infants:         'Infants',
+      infantsAges:     'Under 2',
+      max:             'max',
+      of:              'of',
+      maxGuestsHint:   function(cur, max) { return cur + ' of ' + max + ' max guests selected'; },
+      quantity:        'Quantity',
+      units:           'Units',
+      unitsHint:       function(maxQty) { return 'Number of units to book' + (maxQty ? ' · max ' + maxQty : ''); },
+      priceBreakdown:  'Price breakdown',
+      night:           'night',
+      nights:          'nights',
+      datesSelected:   function(n) { return n + ' date' + (n !== 1 ? 's' : '') + ' selected'; },
+      discountApplied: 'Discount applied',
+      total:           'Total',
+      depositDueNow:   'Deposit due now',
+      perNight:        '(per night)',
+      checkingAvail:   'Checking availability\u2026',
+      maxGuestsLabel:  'Max',
+    },
+    fr: {
+      reserveNow:      'Réserver maintenant',
+      selectCheckIn:   'Sélectionnez la date d\'arrivée',
+      selectCheckOut:  'Sélectionnez la date de départ',
+      selectDate:      'Sélectionnez une date',
+      selectDates:     'Sélectionnez une ou plusieurs dates',
+      selectCheckOutN: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('min ' + min + ' nuits');
+        if (max)     p.push('max ' + max + ' nuits');
+        return p.length ? 'Départ (' + p.join(', ') + ')' : 'Sélectionnez la date de départ';
+      },
+      maxDatesSelected: function(n) { return 'Maximum ' + n + ' dates sélectionnées'; },
+      moreDates: function(rem, max) { return rem + ' date' + (rem !== 1 ? 's' : '') + ' disponible(s) (max ' + max + ')'; },
+      minMaxDates: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('min ' + min + ' dates');
+        if (max)     p.push('max ' + max + ' dates');
+        return 'Sélectionner des dates · ' + p.join(', ');
+      },
+      hideCalendar:    '▲ Masquer le calendrier',
+      showCalendar:    '▼ Afficher le calendrier',
+      whatsIncluded:   'Ce qui est inclus',
+      guests:          'Voyageurs',
+      adults:          'Adultes',
+      adultsAges:      '13 ans et +',
+      children:        'Enfants',
+      childrenAges:    '2–12 ans',
+      infants:         'Bébés',
+      infantsAges:     'Moins de 2 ans',
+      max:             'max',
+      of:              'sur',
+      maxGuestsHint:   function(cur, max) { return cur + ' sur ' + max + ' voyageurs max'; },
+      quantity:        'Quantité',
+      units:           'Unités',
+      unitsHint:       function(maxQty) { return 'Nombre d\'unités à réserver' + (maxQty ? ' · max ' + maxQty : ''); },
+      priceBreakdown:  'Détail du prix',
+      night:           'nuit',
+      nights:          'nuits',
+      datesSelected:   function(n) { return n + ' date' + (n !== 1 ? 's' : '') + ' sélectionnée(s)'; },
+      discountApplied: 'Réduction appliquée',
+      total:           'Total',
+      depositDueNow:   'Acompte à payer maintenant',
+      perNight:        '(par nuit)',
+      checkingAvail:   'Vérification des disponibilités\u2026',
+      maxGuestsLabel:  'Max',
+    },
+    de: {
+      reserveNow:      'Jetzt reservieren',
+      selectCheckIn:   'Anreisedatum wählen',
+      selectCheckOut:  'Abreisedatum wählen',
+      selectDate:      'Datum wählen',
+      selectDates:     'Datum/Daten wählen',
+      selectCheckOutN: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('min ' + min + ' Nächte');
+        if (max)     p.push('max ' + max + ' Nächte');
+        return p.length ? 'Abreise (' + p.join(', ') + ')' : 'Abreisedatum wählen';
+      },
+      maxDatesSelected: function(n) { return 'Maximal ' + n + ' Daten ausgewählt'; },
+      moreDates: function(rem, max) { return rem + ' weitere' + (rem !== 1 ? '' : 's') + ' Datum verfügbar (max ' + max + ')'; },
+      minMaxDates: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('min ' + min + ' Daten');
+        if (max)     p.push('max ' + max + ' Daten');
+        return 'Daten auswählen · ' + p.join(', ');
+      },
+      hideCalendar:    '▲ Kalender ausblenden',
+      showCalendar:    '▼ Kalender anzeigen',
+      whatsIncluded:   'Was ist inbegriffen',
+      guests:          'Gäste',
+      adults:          'Erwachsene',
+      adultsAges:      'Ab 13 Jahren',
+      children:        'Kinder',
+      childrenAges:    '2–12 Jahre',
+      infants:         'Kleinkinder',
+      infantsAges:     'Unter 2 Jahren',
+      max:             'max',
+      of:              'von',
+      maxGuestsHint:   function(cur, max) { return cur + ' von ' + max + ' max. Gästen ausgewählt'; },
+      quantity:        'Anzahl',
+      units:           'Einheiten',
+      unitsHint:       function(maxQty) { return 'Anzahl der zu buchenden Einheiten' + (maxQty ? ' · max ' + maxQty : ''); },
+      priceBreakdown:  'Preisaufschlüsselung',
+      night:           'Nacht',
+      nights:          'Nächte',
+      datesSelected:   function(n) { return n + ' Datum' + (n !== 1 ? 'en' : '') + ' ausgewählt'; },
+      discountApplied: 'Rabatt angewendet',
+      total:           'Gesamt',
+      depositDueNow:   'Anzahlung jetzt fällig',
+      perNight:        '(pro Nacht)',
+      checkingAvail:   'Verfügbarkeit wird geprüft\u2026',
+      maxGuestsLabel:  'Max',
+    },
+    es: {
+      reserveNow:      'Reservar ahora',
+      selectCheckIn:   'Seleccione fecha de entrada',
+      selectCheckOut:  'Seleccione fecha de salida',
+      selectDate:      'Seleccione una fecha',
+      selectDates:     'Seleccione una o más fechas',
+      selectCheckOutN: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('mín ' + min + ' noches');
+        if (max)     p.push('máx ' + max + ' noches');
+        return p.length ? 'Salida (' + p.join(', ') + ')' : 'Seleccione fecha de salida';
+      },
+      maxDatesSelected: function(n) { return 'Máximo ' + n + ' fechas seleccionadas'; },
+      moreDates: function(rem, max) { return rem + ' fecha' + (rem !== 1 ? 's' : '') + ' disponible(s) (máx ' + max + ')'; },
+      minMaxDates: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('mín ' + min + ' fechas');
+        if (max)     p.push('máx ' + max + ' fechas');
+        return 'Seleccionar fechas · ' + p.join(', ');
+      },
+      hideCalendar:    '▲ Ocultar calendario',
+      showCalendar:    '▼ Mostrar calendario',
+      whatsIncluded:   'Qué está incluido',
+      guests:          'Huéspedes',
+      adults:          'Adultos',
+      adultsAges:      'Mayores de 13',
+      children:        'Niños',
+      childrenAges:    '2–12 años',
+      infants:         'Bebés',
+      infantsAges:     'Menores de 2',
+      max:             'máx',
+      of:              'de',
+      maxGuestsHint:   function(cur, max) { return cur + ' de ' + max + ' huéspedes máx seleccionados'; },
+      quantity:        'Cantidad',
+      units:           'Unidades',
+      unitsHint:       function(maxQty) { return 'Número de unidades a reservar' + (maxQty ? ' · máx ' + maxQty : ''); },
+      priceBreakdown:  'Desglose de precio',
+      night:           'noche',
+      nights:          'noches',
+      datesSelected:   function(n) { return n + ' fecha' + (n !== 1 ? 's' : '') + ' seleccionada(s)'; },
+      discountApplied: 'Descuento aplicado',
+      total:           'Total',
+      depositDueNow:   'Depósito a pagar ahora',
+      perNight:        '(por noche)',
+      checkingAvail:   'Comprobando disponibilidad\u2026',
+      maxGuestsLabel:  'Máx',
+    },
+    ar: {
+      reserveNow:      'احجز الآن',
+      selectCheckIn:   'اختر تاريخ الوصول',
+      selectCheckOut:  'اختر تاريخ المغادرة',
+      selectDate:      'اختر تاريخاً',
+      selectDates:     'اختر تاريخاً أو أكثر',
+      selectCheckOutN: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('الحد الأدنى ' + min + ' ليالٍ');
+        if (max)     p.push('الحد الأقصى ' + max + ' ليالٍ');
+        return p.length ? 'المغادرة (' + p.join('، ') + ')' : 'اختر تاريخ المغادرة';
+      },
+      maxDatesSelected: function(n) { return 'تم اختيار الحد الأقصى ' + n + ' تواريخ'; },
+      moreDates: function(rem, max) { return rem + ' تاريخ متاح (الحد الأقصى ' + max + ')'; },
+      minMaxDates: function(min, max) {
+        var p = [];
+        if (min > 1) p.push('الحد الأدنى ' + min + ' تواريخ');
+        if (max)     p.push('الحد الأقصى ' + max + ' تواريخ');
+        return 'اختر تواريخ · ' + p.join('، ');
+      },
+      hideCalendar:    '▲ إخفاء التقويم',
+      showCalendar:    '▼ إظهار التقويم',
+      whatsIncluded:   'ما هو مشمول',
+      guests:          'الضيوف',
+      adults:          'البالغون',
+      adultsAges:      '13 سنة فأكثر',
+      children:        'الأطفال',
+      childrenAges:    '2–12 سنة',
+      infants:         'الرضّع',
+      infantsAges:     'أقل من سنتين',
+      max:             'الحد الأقصى',
+      of:              'من',
+      maxGuestsHint:   function(cur, max) { return cur + ' من ' + max + ' ضيوف كحد أقصى'; },
+      quantity:        'الكمية',
+      units:           'وحدات',
+      unitsHint:       function(maxQty) { return 'عدد الوحدات للحجز' + (maxQty ? ' · الحد الأقصى ' + maxQty : ''); },
+      priceBreakdown:  'تفاصيل السعر',
+      night:           'ليلة',
+      nights:          'ليالٍ',
+      datesSelected:   function(n) { return n + ' تاريخ محدد'; },
+      discountApplied: 'تم تطبيق الخصم',
+      total:           'الإجمالي',
+      depositDueNow:   'الوديعة المستحقة الآن',
+      perNight:        '(في الليلة)',
+      checkingAvail:   'جارٍ التحقق من التوفر\u2026',
+      maxGuestsLabel:  'الحد الأقصى',
+    },
+  };
+
   // ─── Boot ────────────────────────────────────────────────────────────────────
   function boot() {
     const embed = document.getElementById('rentfic-app-embed');
@@ -29,8 +268,12 @@
     container.dataset.currency    = embed.dataset.currency    || 'USD';
     container.dataset.moneyFormat = embed.dataset.moneyFormat || '{{amount}}';
     container.dataset.primaryColor = embed.dataset.primaryColor || '#008060';
-    container.dataset.buttonText  = embed.dataset.buttonText  || 'Reserve Now';
-    container.innerHTML = '<div class="rentfic-loading">Checking availability…</div>';
+    container.dataset.buttonText            = embed.dataset.buttonText            || 'Reserve Now';
+    container.dataset.moneyWithCurrencyFormat = embed.dataset.moneyWithCurrencyFormat || embed.dataset.moneyFormat || '{{amount}}';
+    var hasAppointment = embed.dataset.hasAppointment === 'true';
+    container.innerHTML = hasAppointment
+      ? '<div class="rentfic-loading"><div class="rentfic-spinner"></div></div>'
+      : '<div class="rentfic-loading">Checking availability…</div>';
 
     var inserted = false;
     var beforeFormSelectors = ['.product-form', '.product__form', 'form[action*="/cart/add"]'];
@@ -67,8 +310,9 @@
       this.container    = container;
       this.productId    = container.dataset.productId;
       this.currency     = container.dataset.currency     || 'USD';
-      this.moneyFmt     = container.dataset.moneyFormat  || '{{amount}}';
-      this.primaryColor = container.dataset.primaryColor || '#008060';
+      this.moneyFmt             = container.dataset.moneyFormat             || '{{amount}}';
+      this.moneyWithCurrencyFmt = container.dataset.moneyWithCurrencyFormat || this.moneyFmt;
+      this.primaryColor         = container.dataset.primaryColor             || '#008060';
       this.buttonText   = container.dataset.buttonText   || 'Reserve Now';
 
       this.apartment    = null;
@@ -94,10 +338,32 @@
         const res  = await fetch('/apps/rentfic/apartment/' + this.productId);
         if (!res.ok) throw new Error('API error ' + res.status);
         const data = await res.json();
-        if (!data.found) { this.container.remove(); return; }
+        if (!data.found) {
+          this.container.innerHTML = '<div class="rentfic-loading">Checking availability…</div>';
+          return;
+        }
         this.apartment    = data.apartment;
         this.shopSettings = data.shopSettings || {};
         this.calOpen      = (this.shopSettings.displayCalendar || 'always_open') !== 'default';
+
+        // Detect locale and pick translation bundle
+        var setting = this.shopSettings.translate || 'automatic';
+        var lang;
+        if (setting === 'automatic') {
+          lang = (document.documentElement.lang || navigator.language || 'en').slice(0, 2).toLowerCase();
+        } else {
+          lang = setting;
+        }
+        this.t = I18N[lang] || I18N.en;
+
+        // Build a fast lookup: { "YYYY-MM-DD": { value, type } }
+        this.discountedDateMap = {};
+        (this.apartment.discountedDates || []).forEach(function(group) {
+          (group.dates || []).forEach(function(d) {
+            this.discountedDateMap[d] = { value: group.value, type: group.type };
+          }, this);
+        }, this);
+
         this._setInitialViewMonth();
         this._render();
         document.dispatchEvent(new CustomEvent('rentfic:ready'));
@@ -402,23 +668,20 @@
       const hasSel  = this._hasSelection();
 
       let hint = '';
-      if      (bookingType === 'range'    && !this.startDate) hint = 'Select check-in date';
+      if      (bookingType === 'range'    && !this.startDate) hint = this.t.selectCheckIn;
       else if (bookingType === 'range'    && !this.endDate) {
-        const parts = [];
-        if (minDays > 1) parts.push(`min ${minDays} nights`);
-        if (maxDays)     parts.push(`max ${maxDays} nights`);
-        hint = parts.length ? `Select check-out (${parts.join(', ')})` : 'Select check-out date';
+        hint = this.t.selectCheckOutN(minDays, maxDays);
       }
-      else if (bookingType === 'single'   && !this.startDate) hint = 'Select a date';
+      else if (bookingType === 'single'   && !this.startDate) hint = this.t.selectDate;
       else if (bookingType === 'multiple') {
         const remaining = maxDays ? maxDays - this.selectedDates.length : null;
         const parts = [];
-        if (minDays > 1) parts.push(`min ${minDays} dates`);
-        if (maxDays)     parts.push(`max ${maxDays} dates`);
-        if (remaining !== null && remaining === 0) hint = `Maximum ${maxDays} dates selected`;
+        if (minDays > 1) parts.push('min ' + minDays);
+        if (maxDays)     parts.push('max ' + maxDays);
+        if (remaining !== null && remaining === 0) hint = this.t.maxDatesSelected(maxDays);
         else if (remaining !== null && remaining > 0 && this.selectedDates.length > 0)
-          hint = `${remaining} more date${remaining !== 1 ? 's' : ''} available (max ${maxDays})`;
-        else hint = parts.length ? `Select dates · ${parts.join(', ')}` : 'Select one or more dates';
+          hint = this.t.moreDates(remaining, maxDays);
+        else hint = parts.length ? this.t.minMaxDates(minDays, maxDays) : this.t.selectDates;
       }
 
       const calDefault  = (this.shopSettings.displayCalendar || 'always_open') === 'default';
@@ -426,10 +689,12 @@
 
       this.container.innerHTML = `
         <div class="rentfic-widget" style="--rf-primary:${this.primaryColor}">
+          ${this._renderGallery()}
           ${this._renderHeader(pricePerNight)}
           ${this._renderInfoStrip()}
           ${this._renderAmenities()}
-          ${calDefault ? `<button class="rentfic-toggle-cal" id="rf-toggle-cal">${this.calOpen ? '▲ Hide Calendar' : '▼ Show Calendar'}</button>` : ''}
+          ${this._renderLocation()}
+          ${calDefault ? `<button class="rentfic-toggle-cal" id="rf-toggle-cal">${this.calOpen ? this.t.hideCalendar : this.t.showCalendar}</button>` : ''}
           ${hint && showCal ? `<p class="rentfic-hint">${hint}</p>` : ''}
           ${showCal ? this._renderCal() : ''}
           ${this._renderGuestSelector()}
@@ -483,8 +748,13 @@
       `;
     }
 
-    // Update the Shopify theme's own price display to match the calculated total
+    _fmtPriceWithCurrency(amount) {
+      return this.moneyWithCurrencyFmt.replace(/\{\{amount[^}]*\}\}/g, parseFloat(amount || 0).toFixed(2));
+    }
+
+    // Update the Shopify theme's own price display using the shop's money_with_currency_format
     _syncPagePrice(price) {
+      const formatted = this._fmtPriceWithCurrency(price);
       const selectors = [
         '.price__regular .price-item--regular',
         '.price-item.price-item--regular',
@@ -495,7 +765,7 @@
       ];
       for (const sel of selectors) {
         document.querySelectorAll(sel).forEach(el => {
-          el.textContent = this._fmtPrice(price);
+          el.textContent = formatted;
         });
       }
     }
@@ -521,12 +791,60 @@
     _renderAmenities() {
       const list = this.apartment.amenities || [];
       if (!list.length) return '';
-      const shown = list.slice(0, 8);
-      const more  = list.length - shown.length;
       return `
-        <div class="rf-amenities">
-          ${shown.map(a => `<span class="rf-amenity-tag">${a}</span>`).join('')}
-          ${more > 0 ? `<span class="rf-amenity-more">+${more} more</span>` : ''}
+        <div class="rf-amenities-section">
+          <div class="rf-amenities-title">${this.t.whatsIncluded}</div>
+          <div class="rf-amenities-list">
+            ${list.map(a => `
+              <span class="rf-amenity-tag">
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                ${a}
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    _renderLocation() {
+      const { address, city, country } = this.apartment;
+      if (!city && !country) return '';
+      const locationStr = [address, city, country].filter(Boolean).join(', ');
+      const mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(locationStr);
+      return `
+        <div class="rf-location">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            aria-hidden="true">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+            <circle cx="12" cy="9" r="2.5"/>
+          </svg>
+          <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="rf-location-link">
+            ${locationStr}
+          </a>
+        </div>
+      `;
+    }
+
+    _renderGallery() {
+      const images = this.apartment.images || [];
+      if (!images.length) return '';
+      return `
+        <div class="rf-gallery">
+          ${images.map((url, i) => `
+            <div class="rf-gallery-item${i === 0 ? ' rf-gallery-cover' : ''}">
+              <img
+                src="${url}"
+                alt="Apartment photo ${i + 1}"
+                class="rf-gallery-img"
+                loading="lazy"
+                onclick="this.closest('.rf-gallery-item').classList.toggle('rf-gallery-zoom')"
+              />
+            </div>
+          `).join('')}
         </div>
       `;
     }
@@ -536,14 +854,14 @@
       const totalG = this._totalGuests();
 
       const rows = [
-        { key: 'adults',   label: 'Adults',   sub: 'Ages 13+',  min: 1, max: maxAdults },
-        { key: 'children', label: 'Children', sub: 'Ages 2–12', min: 0, max: maxChildren },
-        { key: 'infants',  label: 'Infants',  sub: 'Under 2',   min: 0, max: maxInfants },
+        { key: 'adults',   label: this.t.adults,   sub: this.t.adultsAges,   min: 1, max: maxAdults },
+        { key: 'children', label: this.t.children, sub: this.t.childrenAges, min: 0, max: maxChildren },
+        { key: 'infants',  label: this.t.infants,  sub: this.t.infantsAges,  min: 0, max: maxInfants },
       ];
 
       return `
         <div class="rf-guest-section">
-          <div class="rf-section-title">Guests</div>
+          <div class="rf-section-title">${this.t.guests}</div>
           ${rows.map(row => {
             const val   = this.guests[row.key];
             const atMin = val <= row.min;
@@ -562,7 +880,7 @@
               </div>
             `;
           }).join('')}
-          ${maxGuests ? `<div class="rf-guest-max-hint">${totalG} of ${maxGuests} max guests selected</div>` : ''}
+          ${maxGuests ? `<div class="rf-guest-max-hint">${this.t.maxGuestsHint(totalG, maxGuests)}</div>` : ''}
         </div>
       `;
     }
@@ -578,11 +896,11 @@
 
       return `
         <div class="rf-qty-section">
-          <div class="rf-section-title">Quantity</div>
+          <div class="rf-section-title">${this.t.quantity}</div>
           <div class="rf-qty-row">
             <div class="rf-guest-label">
-              <span class="rf-guest-name">Units</span>
-              <span class="rf-guest-sub">Number of units to book${stockQuantity ? ` · max ${maxQty}` : ''}</span>
+              <span class="rf-guest-name">${this.t.units}</span>
+              <span class="rf-guest-sub">${this.t.unitsHint(stockQuantity ? maxQty : null)}</span>
             </div>
             <div class="rf-stepper">
               <button class="rf-step-btn" data-qty="-1" ${atMin ? 'disabled' : ''}>−</button>
@@ -593,6 +911,10 @@
           ${stockQuantity ? `<div class="rf-guest-max-hint">${maxQty - this.quantity} of ${maxQty} units still available</div>` : ''}
         </div>
       `;
+    }
+
+    _isDiscounted(date) {
+      return !!(this.discountedDateMap && this.discountedDateMap[this._toStr(date)]);
     }
 
     _renderCal() {
@@ -631,7 +953,15 @@
         if (rS)    cls += ' range-start';
         if (rE)    cls += ' range-end';
 
-        html += `<div class="${cls}" data-date="${this._toStr(date)}">${d}</div>`;
+        const isDisc = inBounds && this._isDiscounted(date);
+        if (isDisc) cls += ' rf-cell--discounted';
+
+        const discData = isDisc ? this.discountedDateMap[this._toStr(date)] : null;
+        const titleAttr = discData
+          ? ` title="${discData.type === 'percent' ? discData.value + '% off' : '$' + discData.value + ' off'}"`
+          : '';
+
+        html += `<div class="${cls}" data-date="${this._toStr(date)}"${titleAttr}>${d}</div>`;
       }
 
       return html + '</div></div>';
@@ -646,36 +976,38 @@
       let dateLabel = '';
       if      (bookingType === 'range'    && this.startDate && this.endDate) dateLabel = `${this._toStr(this.startDate)} &rarr; ${this._toStr(this.endDate)}`;
       else if (bookingType === 'single'   && this.startDate)                 dateLabel = this._toStr(this.startDate);
-      else if (bookingType === 'multiple')                                   dateLabel = `${nights} date${nights !== 1 ? 's' : ''} selected`;
+      else if (bookingType === 'multiple')                                   dateLabel = this.t.datesSelected(nights);
+
+      const nightLabel = nights !== 1 ? this.t.nights : this.t.night;
 
       return `
         <div class="rentfic-summary">
-          <div class="rf-section-title" style="margin-bottom:10px">Price breakdown</div>
+          <div class="rf-section-title" style="margin-bottom:10px">${this.t.priceBreakdown}</div>
           ${dateLabel ? `<div class="rf-sum-row rf-sum-dates"><span>${dateLabel}</span></div>` : ''}
           <div class="rf-sum-row">
             <span>
-              ${this.quantity > 1 ? `${this.quantity} units × ` : ''}${nights} night${nights !== 1 ? 's' : ''} × ${this._fmtPrice(pricePerNight)}
+              ${this.quantity > 1 ? `${this.quantity} ${this.t.units} × ` : ''}${nights} ${nightLabel} × ${this._fmtPrice(pricePerNight)}
             </span>
             <span>${this._fmtPrice(base)}</span>
           </div>
           ${fees.map(fee => `
             <div class="rf-sum-row rf-fee-row">
-              <span>${fee.name}${fee.applyPer === 'night' ? ' <em>(per night)</em>' : ''}</span>
+              <span>${fee.name}${fee.applyPer === 'night' ? ` <em>${this.t.perNight}</em>` : ''}</span>
               <span>${this._fmtPrice(fee.computed)}</span>
             </div>
           `).join('')}
           ${disc > 0 ? `
             <div class="rf-sum-row rf-discount-row">
-              <span>Discount applied</span>
+              <span>${this.t.discountApplied}</span>
               <span>−${this._fmtPrice(disc)}</span>
             </div>
           ` : ''}
           <div class="rf-sum-row rf-total">
-            <strong>Total</strong><strong>${this._fmtPrice(total)}</strong>
+            <strong>${this.t.total}</strong><strong>${this._fmtPrice(total)}</strong>
           </div>
           ${deposit !== null ? `
             <div class="rf-sum-row rf-deposit">
-              <span>Deposit due now</span>
+              <span>${this.t.depositDueNow}</span>
               <span>${this._fmtPrice(deposit)}</span>
             </div>
           ` : ''}
@@ -852,11 +1184,10 @@
         };
         if (bookingDates) properties['Dates'] = bookingDates.join(', ');
         if (bData.isDeposit) {
-          properties['Deposit Paid']  = this._fmtPrice(bData.depositCharged);
-          properties['Balance Due']   = this._fmtPrice(bData.finalTotal - bData.depositCharged);
+          properties['Deposit'] = this._fmtPrice(bData.depositCharged);
         }
 
-        // 2. Add to cart — variant price has been set to finalTotal by the server
+        // 2. Add main booking to cart (variant price = full total)
         const cartRes = await fetch('/cart/add.js', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -868,11 +1199,32 @@
           return;
         }
 
-        // 3. Reset variant price back to pricePerNight (fire-and-forget)
+        // 2b. Add deposit as a separate cart item so it's charged at checkout
+        if (bData.isDeposit && bData.depositVariantId) {
+          await fetch('/cart/add.js', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: bData.depositVariantId,
+              quantity: 1,
+              properties: {
+                'Booking Reference': bData.bookingId,
+                'Note': 'Refundable security deposit',
+                '_booking_id': bData.bookingId,
+              },
+            }),
+          }).catch(() => {});
+        }
+
+        // 3. Reset both variant prices (fire-and-forget)
         fetch('/apps/rentfic/price-reset', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId: this.productId, price: bData.resetPrice }),
+          body: JSON.stringify({
+            productId: this.productId,
+            price: bData.resetPrice,
+            ...(bData.depositVariantGid ? { depositVariantGid: bData.depositVariantGid } : {}),
+          }),
         }).catch(() => {});
 
         // 4. Redirect based on shop setting

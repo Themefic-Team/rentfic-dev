@@ -3,6 +3,17 @@ import { useLoaderData, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { PlanCard } from "../components/PlanCard";
+import { Icon } from "@shopify/polaris";
+import {
+  SearchIcon,
+  RefreshIcon,
+  CalendarIcon,
+  ChevronDownIcon,
+  EmailIcon,
+  CheckSmallIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@shopify/polaris-icons";
 
 async function createDraftOrder(admin, booking, balanceAmount) {
   const dateLabel = booking.endDate && booking.endDate !== booking.startDate
@@ -204,6 +215,18 @@ export const action = async ({ request }) => {
   const intent    = fd.get("intent");
   const bookingId = fd.get("bookingId");
 
+  if (intent === "bulk") {
+    const ids   = JSON.parse(fd.get("ids"));
+    const actionType = fd.get("bulkAction");
+
+    if (actionType === "delete") {
+      await prisma.booking.deleteMany({ where: { shop: session.shop, id: { in: ids } } });
+    } else {
+      await prisma.booking.updateMany({ where: { shop: session.shop, id: { in: ids } }, data: { status: actionType } });
+    }
+    return { success: true };
+  }
+
   if (intent === "syncOrders") {
     const unlinked = await prisma.booking.findMany({
       where: { shop: session.shop, orderId: null },
@@ -371,6 +394,7 @@ export default function BookingPage() {
   const [futureOnly,   setFutureOnly]   = useState(false);
   const [page,         setPage]         = useState(1);
   const [manageOpen,   setManageOpen]   = useState(null); // bookingId
+  const [selected,     setSelected]     = useState(new Set());
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -417,6 +441,18 @@ export default function BookingPage() {
     fetcher.submit(fd, { method: "POST" });
   };
 
+  const handleBulkAction = (actionType) => {
+    if (selected.size === 0) return;
+    if (actionType === "delete" && !confirm("Are you sure you want to delete the selected bookings?")) return;
+    
+    const fd = new FormData();
+    fd.append("intent", "bulk");
+    fd.append("ids", JSON.stringify(Array.from(selected)));
+    fd.append("bulkAction", actionType);
+    fetcher.submit(fd, { method: "POST" });
+    setSelected(new Set());
+  };
+
   const handleSyncOrders = () => {
     const fd = new FormData();
     fd.append("intent", "syncOrders");
@@ -435,6 +471,70 @@ export default function BookingPage() {
   return (
     <s-page heading="Bookings">
       <PlanCard />
+
+      {/* View toggle + New Booking button */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        {/* List / Calendar toggle */}
+        <div style={{ display: "flex", background: "#f6f6f7", border: "1px solid #e1e3e5", borderRadius: 8, padding: 3, gap: 2 }}>
+          <span
+            style={{
+              padding: "6px 16px", borderRadius: 6, fontSize: 13, fontWeight: 600,
+              background: "#fff", color: "#202223", border: "1px solid #e1e3e5",
+              display: "inline-flex", alignItems: "center", gap: 5,
+            }}
+          >
+            ☰ List
+          </span>
+          <a
+            href="/app/booking/calendar"
+            style={{
+              padding: "6px 16px", borderRadius: 6, fontSize: 13, fontWeight: 500,
+              background: "transparent", color: "#6d7175", border: "1px solid transparent",
+              display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none",
+            }}
+          >
+            📅 Calendar
+          </a>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px" }}>
+          <a
+            href="/api/export/bookings?format=csv"
+            download
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "9px 18px", background: "#fff", color: "#202223", border: "1px solid #c9cccf",
+              borderRadius: 8, fontSize: 14, fontWeight: 600,
+              textDecoration: "none", whiteSpace: "nowrap",
+            }}
+          >
+            📊 Export CSV
+          </a>
+          <a
+            href="/api/export/ical/all"
+            download
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "9px 18px", background: "#fff", color: "#202223", border: "1px solid #c9cccf",
+              borderRadius: 8, fontSize: 14, fontWeight: 600,
+              textDecoration: "none", whiteSpace: "nowrap",
+            }}
+          >
+            🗓️ Export iCal
+          </a>
+          <a
+            href="/app/booking/new"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "9px 18px", background: "#202223", color: "#fff",
+              borderRadius: 8, fontSize: 14, fontWeight: 600,
+              textDecoration: "none", whiteSpace: "nowrap",
+            }}
+          >
+            + New Booking
+          </a>
+        </div>
+      </div>
 
       <s-section>
         {/* Sync result banner */}
@@ -456,7 +556,7 @@ export default function BookingPage() {
         <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
           {/* Search */}
           <div style={{ position: "relative", flex: "1 1 260px", minWidth: 200 }}>
-            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#8c9196", fontSize: 14 }}>🔍</span>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#8c9196", display: "flex" }}><Icon source={SearchIcon} /></span>
             <input
               type="text"
               value={search}
@@ -471,37 +571,40 @@ export default function BookingPage() {
             onClick={handleSyncOrders}
             disabled={fetcher.state !== "idle"}
             style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "9px 16px", border: "1px solid #005bd3", borderRadius: 8,
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "9px 16px", border: "1px solid #c9cccf", borderRadius: 8,
               fontSize: 13, fontWeight: 600, cursor: "pointer",
-              background: "#005bd3", color: "#fff",
+              background: "#fff", color: "#202223",
               opacity: fetcher.state !== "idle" ? 0.6 : 1,
             }}
           >
-            {fetcher.state !== "idle" ? "Syncing…" : "⟳ Sync Orders"}
+            <Icon source={RefreshIcon} />
+            {fetcher.state !== "idle" ? "Syncing…" : "Sync Orders"}
           </button>
 
           {/* Future Bookings toggle */}
           <button
             onClick={() => { setFutureOnly((v) => !v); setPage(1); }}
             style={{
-              display: "flex", alignItems: "center", gap: 7,
+              display: "flex", alignItems: "center", gap: 6,
               padding: "9px 16px", border: "1px solid #c9cccf", borderRadius: 8,
               fontSize: 13, fontWeight: 500, cursor: "pointer",
               background: futureOnly ? "#f1f2f3" : "#fff",
               color: futureOnly ? "#202223" : "#6d7175",
             }}
           >
-            <span>⊙</span> Future Bookings
+            <Icon source={CalendarIcon} />
+            Future Bookings
           </button>
 
           {/* All Time label */}
           <div style={{
-            display: "flex", alignItems: "center", gap: 7,
+            display: "flex", alignItems: "center", gap: 6,
             padding: "9px 16px", border: "1px solid #c9cccf", borderRadius: 8,
             fontSize: 13, color: "#6d7175", background: "#fff",
           }}>
-            <span>📅</span> All Time
+            <Icon source={CalendarIcon} />
+            All Time
           </div>
         </div>
 
@@ -529,8 +632,50 @@ export default function BookingPage() {
           </span>
         </div>
 
+        {/* Bulk Actions Bar */}
+        {selected.size > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", background: "#f4f6f8", border: "1px solid #c9cccf", borderRadius: 8, marginBottom: 16 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#202223" }}>{selected.size} selected</span>
+            <button
+              onClick={() => handleBulkAction("confirmed")}
+              style={{ padding: "5px 12px", fontSize: 13, fontWeight: 500, borderRadius: 4, border: "1px solid #c9cccf", background: "#fff", cursor: "pointer" }}
+            >
+              Confirm
+            </button>
+            <button
+              onClick={() => handleBulkAction("cancelled")}
+              style={{ padding: "5px 12px", fontSize: 13, fontWeight: 500, borderRadius: 4, border: "1px solid #c9cccf", background: "#fff", cursor: "pointer" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => handleBulkAction("delete")}
+              style={{ padding: "5px 12px", fontSize: 13, fontWeight: 500, borderRadius: 4, border: "1px solid #c9cccf", background: "#fff", color: "#d82c0d", cursor: "pointer", marginLeft: "auto" }}
+            >
+              Delete
+            </button>
+          </div>
+        )}
+
         {/* Card list */}
-        <div style={{ border: "1px solid #e1e3e5", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ border: "1px solid #e1e3e5", borderRadius: 10, overflow: "hidden", background: "#fff", minWidth: 700 }}>
+          {/* Header row with Select All */}
+          {paged.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderBottom: "1px solid #e1e3e5", background: "#fafbfc" }}>
+              <input
+                type="checkbox"
+                checked={selected.size === filtered.length && filtered.length > 0}
+                onChange={(e) => {
+                  if (e.target.checked) setSelected(new Set(filtered.map(b => b.id)));
+                  else setSelected(new Set());
+                }}
+                style={{ cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#6d7175" }}>Select All (in current view)</span>
+            </div>
+          )}
+
           {paged.length === 0 ? (
             <div style={{ padding: "56px 24px", textAlign: "center", fontSize: 14, color: "#6d7175" }}>
               {bookings.length === 0 ? "No bookings yet." : "No bookings match your filters."}
@@ -549,9 +694,21 @@ export default function BookingPage() {
               return (
                 <div
                   key={b.id}
-                  style={{ borderBottom: isLast ? "none" : "1px solid #e1e3e5", padding: "18px 20px" }}
+                  style={{ borderBottom: isLast ? "none" : "1px solid #e1e3e5", padding: "18px 20px", background: selected.has(b.id) ? "#f4f6f8" : "#fff" }}
                 >
                   <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", alignItems: "center", alignSelf: "center", paddingRight: 4 }}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(b.id)}
+                        onChange={() => setSelected((prev) => {
+                          const next = new Set(prev);
+                          next.has(b.id) ? next.delete(b.id) : next.add(b.id);
+                          return next;
+                        })}
+                        style={{ cursor: "pointer" }}
+                      />
+                    </div>
                     {/* Thumbnail */}
                     <div style={{ width: 56, height: 56, borderRadius: 8, background: "#f1f2f3", border: "1px solid #e1e3e5", flexShrink: 0 }} />
 
@@ -592,11 +749,13 @@ export default function BookingPage() {
                           <button
                             onClick={() => setManageOpen(isManage ? null : b.id)}
                             style={{
+                              display: "flex", alignItems: "center", gap: 4,
                               padding: "7px 14px", border: "1px solid #c9cccf", borderRadius: 6,
                               fontSize: 13, fontWeight: 500, background: "#fff", cursor: "pointer", color: "#202223",
                             }}
                           >
-                            Manage ▾
+                            Manage
+                            <Icon source={ChevronDownIcon} />
                           </button>
                           {isManage && (
                             <div style={{
@@ -632,18 +791,19 @@ export default function BookingPage() {
                         {b.balanceDue && b.balanceStatus !== "paid" && (
                           b.balanceStatus === "invoiced" ? (
                             <span style={{
+                              display: "inline-flex", alignItems: "center", gap: 5,
                               padding: "7px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600,
                               background: "#d4edda", color: "#155724", border: "1px solid #c3e6cb",
                             }}>
-                              ✉ Invoice Sent
+                              <Icon source={EmailIcon} /> Invoice Sent
                             </span>
                           ) : (
                             <button
                               onClick={() => handleSendInvoice(b.id)}
                               style={{
                                 padding: "7px 14px", borderRadius: 6,
-                                border: "1px solid #005bd3", fontSize: 13, fontWeight: 600,
-                                background: "#005bd3", color: "#fff", cursor: "pointer",
+                                border: "1px solid #c9cccf", fontSize: 13, fontWeight: 600,
+                                background: "#fff", color: "#202223", cursor: "pointer",
                               }}
                             >
                               Send Invoice
@@ -666,11 +826,12 @@ export default function BookingPage() {
                         )}
                         {b.status === "completed" && (
                           <span style={{
+                            display: "inline-flex", alignItems: "center", gap: 5,
                             padding: "7px 14px", borderRadius: 6,
                             fontSize: 13, fontWeight: 600,
                             background: "#e2e3e5", color: "#383d41",
                           }}>
-                            ✓ Completed
+                            <Icon source={CheckSmallIcon} /> Completed
                           </span>
                         )}
                       </div>
@@ -713,6 +874,7 @@ export default function BookingPage() {
               );
             })
           )}
+          </div>
         </div>
 
         {/* Pagination */}
@@ -721,17 +883,17 @@ export default function BookingPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={safePage === 1}
-              style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #c9cccf", background: "#fff", cursor: safePage === 1 ? "not-allowed" : "pointer", color: safePage === 1 ? "#c9cccf" : "#202223", fontSize: 16 }}
+              style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #c9cccf", background: "#fff", cursor: safePage === 1 ? "not-allowed" : "pointer", color: safePage === 1 ? "#c9cccf" : "#202223", display: "flex", alignItems: "center", justifyContent: "center" }}
             >
-              ‹
+              <Icon source={ChevronLeftIcon} />
             </button>
             <span style={{ fontSize: 13, color: "#6d7175" }}>{safePage} / {totalPages}</span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage === totalPages}
-              style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #c9cccf", background: "#fff", cursor: safePage === totalPages ? "not-allowed" : "pointer", color: safePage === totalPages ? "#c9cccf" : "#202223", fontSize: 16 }}
+              style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #c9cccf", background: "#fff", cursor: safePage === totalPages ? "not-allowed" : "pointer", color: safePage === totalPages ? "#c9cccf" : "#202223", display: "flex", alignItems: "center", justifyContent: "center" }}
             >
-              ›
+              <Icon source={ChevronRightIcon} />
             </button>
           </div>
         )}

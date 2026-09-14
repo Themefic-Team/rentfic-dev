@@ -43,6 +43,69 @@ function calcTotal(apartment, nights, guests = {}, quantity = 1) {
   return Math.max(0, base + fees - discount);
 }
 
+// Update a single variant's price directly by its GID (no product lookup needed)
+async function updateVariantPriceByGid(variantGid, price, endpoint, headers) {
+  await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      query: `mutation {
+        productVariantUpdate(input: { id: "${variantGid}", price: "${parseFloat(price).toFixed(2)}" }) {
+          productVariant { id price }
+          userErrors { field message }
+        }
+      }`,
+    }),
+  });
+}
+
+// Get or create the shop's dedicated "Deposit" product; returns the variant GID
+async function getOrCreateDepositVariant(shop, endpoint, headers) {
+  const shopRec = await prisma.shop.findUnique({ where: { shop } });
+  const existingGid = shopRec?.settings?.depositVariantGid;
+
+  if (existingGid) {
+    const chk = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ query: `{ node(id: "${existingGid}") { id } }` }),
+    });
+    const chkJson = await chk.json();
+    if (chkJson?.data?.node?.id) return existingGid;
+  }
+
+  // Create a new "Deposit" product with unlimited inventory
+  const createRes = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      query: `mutation {
+        productCreate(input: {
+          title: "Deposit"
+          status: ACTIVE
+          variants: [{ price: "0.00", inventoryPolicy: CONTINUE }]
+        }) {
+          product { variants(first: 1) { edges { node { id } } } }
+          userErrors { field message }
+        }
+      }`,
+    }),
+  });
+  const createJson = await createRes.json();
+  const variantGid = createJson?.data?.productCreate?.product?.variants?.edges?.[0]?.node?.id;
+
+  if (variantGid) {
+    const settings = { ...(shopRec?.settings || {}), depositVariantGid: variantGid };
+    await prisma.shop.upsert({
+      where:  { shop },
+      update: { settings },
+      create: { shop, settings },
+    });
+  }
+
+  return variantGid || null;
+}
+
 async function updateVariantPrice(shop, productGid, price) {
   const sess = await prisma.session.findFirst({
     where: { shop, isOnline: false },
@@ -154,8 +217,7 @@ export const action = async ({ request }) => {
 
   const finalTotal = calcTotal(apartment, parsedNights, guests || {}, parsedQuantity);
 
-  // Deposit calculation — charge only deposit now if enabled
-  let chargeNow = finalTotal;
+  // Deposit calculation
   let depositCharged = null;
   const depositEnabled = s.depositEnabled ?? false;
   const depositType    = s.depositType ?? "percent";
@@ -167,7 +229,6 @@ export const action = async ({ request }) => {
     } else {
       depositCharged = Math.min(depositAmt, finalTotal);
     }
-    chargeNow = depositCharged;
   }
 
   const booking = await prisma.booking.create({
@@ -191,20 +252,46 @@ export const action = async ({ request }) => {
     },
   });
 
-  // Update variant price to chargeNow (deposit or full total) — widget adds to cart right after
   const productGid = apartment.productId.startsWith("gid://")
     ? apartment.productId
     : `gid://shopify/Product/${apartment.productId}`;
 
-  await updateVariantPrice(session.shop, productGid, chargeNow);
+  const sess = await prisma.session.findFirst({
+    where: { shop: session.shop, isOnline: false },
+    orderBy: { expires: "desc" },
+  });
+  const endpoint = `https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const headers  = {
+    "Content-Type": "application/json",
+    "X-Shopify-Access-Token": sess?.accessToken,
+  };
+
+  // Main booking variant → full total
+  await updateVariantPrice(session.shop, productGid, finalTotal);
+
+  // Deposit variant → deposit amount (charged as separate cart item)
+  let depositVariantGid = null;
+  let depositVariantId  = null;
+  if (depositCharged && sess?.accessToken) {
+    try {
+      depositVariantGid = await getOrCreateDepositVariant(session.shop, endpoint, headers);
+      if (depositVariantGid) {
+        await updateVariantPriceByGid(depositVariantGid, depositCharged, endpoint, headers);
+        depositVariantId = depositVariantGid.split("/").pop();
+      }
+    } catch (err) {
+      console.error("[Rentfic] deposit variant error:", err);
+    }
+  }
 
   return Response.json({
-    success:        true,
-    bookingId:      booking.id,
+    success:          true,
+    bookingId:        booking.id,
     finalTotal,
-    chargeNow,
-    isDeposit:      depositCharged !== null,
+    isDeposit:        depositCharged !== null,
     depositCharged,
-    resetPrice:     apartment.pricePerNight || 0,
+    depositVariantId,
+    depositVariantGid,
+    resetPrice:       apartment.pricePerNight || 0,
   });
 };

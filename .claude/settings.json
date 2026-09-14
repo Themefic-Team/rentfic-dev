@@ -30,7 +30,8 @@
       "Bash(del \"d:\\\\shopify-app\\\\rentfic-dev\\\\docs\\\\gen_qa.py\")",
       "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
       "PowerShell(Stop-Process -Force -Confirm:$false)",
-      "Bash(npx shopify *)"
+      "Bash(npx shopify *)",
+      "Bash(node -e \"const icons = require\\('d:/shopify-app/rentfic-dev/node_modules/@shopify/polaris-icons'\\); const names = Object.keys\\(icons\\).filter\\(k => /calendar|clock|list|check|date|range|multi|select/i.test\\(k\\)\\); console.log\\(names.join\\('\\\\n'\\)\\);\")"
     ],
     "additionalDirectories": [
       "D:\\shopify-app\\rentfic-dev\\node_modules\\.prisma\\client"

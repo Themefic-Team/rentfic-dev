@@ -205,8 +205,12 @@ export default function SettingsPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             <label htmlFor="translate" style={{ fontSize: "14px", fontWeight: 500 }}>Translate</label>
             <select id="translate" value={translate} onChange={(e) => setTranslate(e.target.value)} style={selectStyle}>
-              <option value="automatic">Automatic</option>
-              <option value="english">English</option>
+              <option value="automatic">Automatic (detect from browser)</option>
+              <option value="en">English</option>
+              <option value="fr">French — Français</option>
+              <option value="de">German — Deutsch</option>
+              <option value="es">Spanish — Español</option>
+              <option value="ar">Arabic — العربية</option>
             </select>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>

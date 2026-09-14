@@ -55,4 +55,7 @@ export default defineConfig({
   optimizeDeps: {
     include: ["@shopify/app-bridge-react"],
   },
+  resolve: {
+    dedupe: ["react", "react-dom"]
+  }
 });

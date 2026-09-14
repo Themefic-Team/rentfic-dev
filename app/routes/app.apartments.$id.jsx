@@ -9,7 +9,7 @@ import {
 import { redirect } from "react-router";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import { Popover, DatePicker, TextField, Icon } from "@shopify/polaris";
-import { CalendarIcon } from "@shopify/polaris-icons";
+import { CalendarIcon, CalendarTimeIcon, CalendarCheckIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
@@ -198,6 +198,8 @@ export const action = async ({ request, params }) => {
     depositAmount: fd.get("depositAmount") ? parseFloat(fd.get("depositAmount")) : null,
     // balance collection
     balanceAutoInvoice: fd.get("balanceAutoInvoice") === "true",
+    // photos
+    images: JSON.parse(fd.get("images") || "[]"),
   };
 
   if (params.id === "new") {
@@ -403,6 +405,7 @@ export default function ApartmentEditPage() {
       depositType: s.depositType ?? "percent",
       depositAmount: s.depositAmount?.toString() ?? "",
       balanceAutoInvoice: s.balanceAutoInvoice ?? false,
+      images: s.images ?? [],
     };
   }
 
@@ -439,6 +442,7 @@ export default function ApartmentEditPage() {
   const [depositType, setDepositType] = useState(o.depositType);
   const [depositAmount, setDepositAmount] = useState(o.depositAmount);
   const [balanceAutoInvoice, setBalanceAutoInvoice] = useState(o.balanceAutoInvoice);
+  const [images, setImages] = useState(o.images); // photo URLs stored in settings.images
   const [isDirty, setIsDirty] = useState(false);
 
   const [amenityInput, setAmenityInput] = useState("");
@@ -482,6 +486,7 @@ export default function ApartmentEditPage() {
     setConditionalDiscounts(o.conditionalDiscounts); setDepositEnabled(o.depositEnabled);
     setDepositType(o.depositType); setDepositAmount(o.depositAmount);
     setBalanceAutoInvoice(o.balanceAutoInvoice);
+    setImages(o.images);
     setIsDirty(false);
   };
 
@@ -527,6 +532,7 @@ export default function ApartmentEditPage() {
     fd.append("depositType", depositType);
     fd.append("depositAmount", depositAmount);
     fd.append("balanceAutoInvoice", String(balanceAutoInvoice));
+    fd.append("images", JSON.stringify(images));
     submit(fd, { method: "POST" });
   };
 
@@ -642,6 +648,23 @@ export default function ApartmentEditPage() {
 
       <s-page heading={isNew ? "Create Apartment" : `Edit: ${apartment.name}`}>
 
+        {!isNew && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
+            <a
+              href={`/api/export/ical/${apartment.id}`}
+              download
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "9px 18px", background: "#fff", color: "#202223", border: "1px solid #c9cccf",
+                borderRadius: 8, fontSize: 14, fontWeight: 600,
+                textDecoration: "none", whiteSpace: "nowrap",
+              }}
+            >
+              🗓️ Export iCal
+            </a>
+          </div>
+        )}
+
         {/* ── Linked Product ── */}
         <s-section heading="Linked Product">
           <div style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px", background:"#f6f6f7", borderRadius:8, border:"1px solid #e1e3e5" }}>
@@ -657,33 +680,57 @@ export default function ApartmentEditPage() {
         <s-section heading="Booking Settings">
           <div style={{ marginBottom:20 }}>
             <div style={{ fontSize:14, fontWeight:500, color:"#202223", marginBottom:10 }}>Booking Type</div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12 }}>
               {[
-                { value:"single",   title:"Single",  icon:"📅", desc:"One fixed date per booking." },
-                { value:"range",    title:"Range",   icon:"📆", desc:"Customer selects a date range (check-in → check-out)." },
-                { value:"multiple", title:"Multiple",icon:"🗓️", desc:"Customer picks multiple individual dates." },
-              ].map(({ value, title, icon, desc }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => { setBookingType(value); setIsDirty(true); }}
-                  style={{
-                    padding:"16px 14px", textAlign:"left", cursor:"pointer",
-                    border:`2px solid ${bookingType === value ? "#202223" : "#e1e3e5"}`,
-                    borderRadius:10,
-                    background: bookingType === value ? "#f6f6f7" : "#fff",
-                    transition:"all 0.15s",
-                  }}
-                >
-                  <div style={{ fontSize:20, marginBottom:6 }}>{icon}</div>
-                  <div style={{ fontSize:14, fontWeight:600, color: bookingType === value ? "#202223" : "#202223", marginBottom:4 }}>{title}</div>
-                  <div style={{ fontSize:12, color:"#6d7175", lineHeight:1.5 }}>{desc}</div>
-                </button>
-              ))}
+                { value:"single",   title:"Single",  icon:CalendarIcon,      desc:"One fixed date per booking.",                            color:"#e3f1fb", iconColor:"#008060" },
+                { value:"range",    title:"Range",   icon:CalendarTimeIcon,  desc:"Customer selects a date range (check-in → check-out).",  color:"#f0f4ff", iconColor:"#008060" },
+                { value:"multiple", title:"Multiple",icon:CalendarCheckIcon, desc:"Customer picks multiple individual dates.",               color:"#e6f7f1", iconColor:"#008060" },
+              ].map(({ value, title, icon, desc, color, iconColor }) => {
+                const isActive = bookingType === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => { setBookingType(value); setIsDirty(true); }}
+                    style={{
+                      padding:"18px 16px", textAlign:"left", cursor:"pointer",
+                      border:`2px solid ${isActive ? iconColor : "#e1e3e5"}`,
+                      borderRadius:12,
+                      background: isActive ? color : "#fff",
+                      transition:"all 0.15s",
+                      boxShadow: isActive ? `0 0 0 3px ${iconColor}22` : "none",
+                      position:"relative",
+                    }}
+                  >
+                    {isActive && (
+                      <span style={{
+                        position:"absolute", top:10, right:10,
+                        width:18, height:18, borderRadius:"50%",
+                        background: iconColor, display:"flex", alignItems:"center", justifyContent:"center",
+                      }}>
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </span>
+                    )}
+                    <div style={{
+                      width:36, height:36, borderRadius:8, marginBottom:12,
+                      background: isActive ? iconColor : "#f1f2f3",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                    }}>
+                      <span style={{ color: isActive ? "#fff" : "#6d7175", display:"flex" }}>
+                        <Icon source={icon} />
+                      </span>
+                    </div>
+                    <div style={{ fontSize:14, fontWeight:700, color:"#202223", marginBottom:4 }}>{title}</div>
+                    <div style={{ fontSize:12, color:"#6d7175", lineHeight:1.5 }}>{desc}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(250px, 1fr))", gap:16 }}>
             <Field label="Apartment Name *">
               <Inp type="text" value={name} onChange={mark(setName)} placeholder="e.g. Ocean View Suite" />
             </Field>
@@ -728,7 +775,7 @@ export default function ApartmentEditPage() {
             <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
               {blockedDates.map((d) => (
                 <span key={d} style={tagStyle}>
-                  📅 {fmtDate(d)}
+                  <Icon source={CalendarIcon} /> {fmtDate(d)}
                   <button type="button"
                     onClick={() => { setBlockedDates((p) => p.filter((x) => x !== d)); setIsDirty(true); }}
                     style={tagX}>×</button>
@@ -742,7 +789,7 @@ export default function ApartmentEditPage() {
 
         {/* ══════════════ AVAILABILITY ══════════════ */}
         <s-section heading="Availability">
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", gap:16, marginBottom:20 }}>
             <DatePickerField
               label="Calendar Start"
               hint="Earliest bookable date"
@@ -809,7 +856,7 @@ export default function ApartmentEditPage() {
 
         {/* ══════════════ STOCK MANAGEMENT ══════════════ */}
         <s-section heading="Stock Management">
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16, marginBottom:16 }}>
             <Field label="Bedrooms">
               <Inp type="number" min={0} value={bedrooms} onChange={mark(setBedrooms)} placeholder="0" />
             </Field>
@@ -835,7 +882,7 @@ export default function ApartmentEditPage() {
             </div>
           )}
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginTop:20 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(250px, 1fr))", gap:16, marginTop:20 }}>
             <Field label="Address" style={{ gridColumn:"1/-1" }}>
               <Inp type="text" value={address} onChange={mark(setAddress)} placeholder="123 Beach Road" />
             </Field>
@@ -850,7 +897,7 @@ export default function ApartmentEditPage() {
 
         {/* ══════════════ PRICE ══════════════ */}
         <s-section heading="Price">
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:24 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", gap:16, marginBottom:24 }}>
             <Field label="Price per Night ($)">
               <div style={{ position:"relative" }}>
                 <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"#6d7175", fontSize:14 }}>$</span>
@@ -886,7 +933,7 @@ export default function ApartmentEditPage() {
             )}
 
             <div style={{ ...editCardStyle, display:"flex", flexDirection:"column", gap:12 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", gap:12, alignItems:"end" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12, alignItems:"end" }}>
                 <Field label="Fee Name">
                   <Inp type="text" placeholder="e.g. Cleaning Fee"
                     id="fee-name-input" />
@@ -978,7 +1025,7 @@ export default function ApartmentEditPage() {
                 <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:14 }}>
                   {editingDiscount.dates.map((d) => (
                     <span key={d} style={tagStyle}>
-                      📅 {fmtDate(d)}
+                      <Icon source={CalendarIcon} /> {fmtDate(d)}
                       <button type="button"
                         onClick={() => setEditingDiscount((p) => ({ ...p, dates: p.dates.filter((x) => x !== d) }))}
                         style={tagX}>×</button>
@@ -1185,6 +1232,152 @@ export default function ApartmentEditPage() {
               </button>
             ))}
           </div>
+        </s-section>
+
+        {/* ── Photos ── */}
+        <s-section heading="Photos">
+          <p style={{ fontSize: 13, color: "#6d7175", marginBottom: 14, marginTop: 0 }}>
+            Upload photos of this apartment. They will be displayed in the storefront booking widget.
+          </p>
+
+          {/* Upload input */}
+          <div style={{ marginBottom: 16 }}>
+            <label
+              htmlFor="apt-photo-upload"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "9px 18px", background: "#fff", border: "1px solid #c9cccf",
+                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#202223",
+              }}
+            >
+              📷 Choose Photos
+            </label>
+            <input
+              id="apt-photo-upload"
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={async (e) => {
+                const files = Array.from(e.target.files || []);
+                if (!files.length) return;
+
+                // Convert each file to a base64 data-URL for instant preview,
+                // then upload to Shopify Files API via the action
+                const previews = await Promise.all(
+                  files.map(
+                    (f) =>
+                      new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsDataURL(f);
+                      })
+                  )
+                );
+
+                // Show previews immediately
+                setImages((prev) => [...prev, ...previews]);
+                setIsDirty(true);
+                // Reset input so same file can be re-selected
+                e.target.value = "";
+              }}
+            />
+            <span style={{ fontSize: 12, color: "#6d7175", marginLeft: 12 }}>
+              PNG, JPG, WEBP — up to 20 MB each
+            </span>
+          </div>
+
+          {/* Photo grid */}
+          {images.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {images.map((url, i) => (
+                <div
+                  key={i}
+                  style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: "1px solid #e1e3e5" }}
+                >
+                  <img
+                    src={url}
+                    alt={`Photo ${i + 1}`}
+                    style={{ width: 120, height: 96, objectFit: "cover", display: "block" }}
+                  />
+                  {/* Remove button */}
+                  <button
+                    type="button"
+                    onClick={() => { setImages((p) => p.filter((_, idx) => idx !== i)); setIsDirty(true); }}
+                    title="Remove photo"
+                    style={{
+                      position: "absolute", top: 4, right: 4,
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: "rgba(0,0,0,0.55)", color: "#fff",
+                      border: "none", cursor: "pointer", fontSize: 13,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                  {/* Move left */}
+                  {i > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImages((p) => {
+                          const a = [...p];
+                          [a[i - 1], a[i]] = [a[i], a[i - 1]];
+                          return a;
+                        });
+                        setIsDirty(true);
+                      }}
+                      title="Move left"
+                      style={{
+                        position: "absolute", bottom: 4, left: 4,
+                        width: 22, height: 22, borderRadius: "50%",
+                        background: "rgba(0,0,0,0.45)", color: "#fff",
+                        border: "none", cursor: "pointer", fontSize: 12,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >‹</button>
+                  )}
+                  {/* Move right */}
+                  {i < images.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImages((p) => {
+                          const a = [...p];
+                          [a[i], a[i + 1]] = [a[i + 1], a[i]];
+                          return a;
+                        });
+                        setIsDirty(true);
+                      }}
+                      title="Move right"
+                      style={{
+                        position: "absolute", bottom: 4, right: 4,
+                        width: 22, height: 22, borderRadius: "50%",
+                        background: "rgba(0,0,0,0.45)", color: "#fff",
+                        border: "none", cursor: "pointer", fontSize: 12,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >›</button>
+                  )}
+                  {i === 0 && (
+                    <div style={{
+                      position: "absolute", bottom: 4, left: 4,
+                      background: "rgba(0,0,0,0.55)", color: "#fff",
+                      fontSize: 9, fontWeight: 700, borderRadius: 4, padding: "1px 5px",
+                    }}>COVER</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              border: "2px dashed #e1e3e5", borderRadius: 8, padding: "32px 0",
+              textAlign: "center", color: "#6d7175", fontSize: 13,
+            }}>
+              No photos yet — click "Choose Photos" to add some.
+            </div>
+          )}
         </s-section>
 
       </s-page>

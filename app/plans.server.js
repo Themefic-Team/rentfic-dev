@@ -5,18 +5,10 @@ export const PLAN_LIMITS = {
 };
 
 export const BILLING_PLANS = {
-  pro: {
-    name: "Pro",
-    amount: 19,
-    currencyCode: "USD",
-    trialDays: 7,
-  },
-  business: {
-    name: "Business",
-    amount: 49,
-    currencyCode: "USD",
-    trialDays: 7,
-  },
+  pro:             { name: "Pro",              amount: 19,                           currencyCode: "USD", trialDays: 7, interval: "EVERY_30_DAYS" },
+  pro_yearly:      { name: "Pro Yearly",       amount: Math.round(19 * 0.8 * 12),   currencyCode: "USD", trialDays: 7, interval: "ANNUAL"        },
+  business:        { name: "Business",         amount: 49,                           currencyCode: "USD", trialDays: 7, interval: "EVERY_30_DAYS" },
+  business_yearly: { name: "Business Yearly",  amount: Math.round(49 * 0.8 * 12),   currencyCode: "USD", trialDays: 7, interval: "ANNUAL"        },
 };
 
 export function getPlanLimits(plan) {
@@ -26,6 +18,8 @@ export function getPlanLimits(plan) {
 export function planKeyFromName(name) {
   if (!name) return "free";
   const lower = name.toLowerCase();
+  // "Pro Yearly" and "Business Yearly" map to the same DB plan key as their
+  // monthly counterparts — no schema change needed for yearly billing.
   if (lower.includes("business")) return "business";
   if (lower.includes("pro"))      return "pro";
   return "free";

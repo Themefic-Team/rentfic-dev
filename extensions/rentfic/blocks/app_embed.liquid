@@ -3,11 +3,16 @@
   data-enabled="{{ block.settings.enabled }}"
   data-currency="{{ shop.currency }}"
   data-money-format="{{ shop.money_format | escape }}"
+  data-money-with-currency-format="{{ shop.money_with_currency_format | escape }}"
   data-primary-color="{{ block.settings.primary_color }}"
   data-button-text="{{ block.settings.button_text | escape }}"
+  data-has-appointment="{% if request.page_type == 'product' and product.metafields.rentfic.is_apartment == 'true' %}true{% else %}false{% endif %}"
   style="display:none;">
 </div>
-
+ {% comment %} show all meta field data {% endcomment %}
+ {% for metafield in product.metafields.rentfic %} 
+    <p>{{ metafield.key }}: {{ metafield.value }}</p>
+ {% endfor %}
 {% if request.page_type == 'product' and product.metafields.rentfic.is_apartment == 'true' %}
 <style>
   /* hide add-to-cart, sold-out, quantity, and payment buttons — NOT the price */

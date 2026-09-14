@@ -84,7 +84,7 @@ export const loader = async ({ request }) => {
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData();
+  const { apiKey, appPlan } = useLoaderData();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -95,9 +95,24 @@ export default function App() {
           <s-link href="/app/settings">Global Settings</s-link>
           <s-link href="/app/booking">Booking</s-link>
           <s-link href="/app/notifications">Notifications</s-link>
+          {appPlan === "business" && (
+            <s-link href="/app/analytics">Analytics</s-link>
+          )}
           <s-link href="/app/subscribtion">Subscription</s-link>
+          <s-link href="/app/help">Help</s-link>
         </s-app-nav>
         <Outlet />
+        {appPlan === "business" && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                window.$crisp=[];window.CRISP_WEBSITE_ID="YOUR_CRISP_ID";
+                (function(){d=document;s=d.createElement("script");s.src="https://client.crisp.chat/l.js";
+                s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();
+              `,
+            }}
+          />
+        )}
       </PolarisProvider>
     </AppProvider>
   );

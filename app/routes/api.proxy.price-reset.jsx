@@ -3,18 +3,40 @@ import prisma from "../db.server";
 
 const SHOPIFY_API_VERSION = "2025-10";
 
-async function setVariantPrice(shop, productGid, price) {
+async function getShopifyClient(shop) {
   const sess = await prisma.session.findFirst({
     where: { shop, isOnline: false },
     orderBy: { expires: "desc" },
   });
-  if (!sess?.accessToken) return;
-
-  const endpoint = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
-  const headers = {
-    "Content-Type": "application/json",
-    "X-Shopify-Access-Token": sess.accessToken,
+  if (!sess?.accessToken) return null;
+  return {
+    endpoint: `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": sess.accessToken,
+    },
   };
+}
+
+async function setVariantPriceByGid(variantGid, price, endpoint, headers) {
+  await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      query: `mutation {
+        productVariantUpdate(input: { id: "${variantGid}", price: "${parseFloat(price || 0).toFixed(2)}" }) {
+          productVariant { id }
+          userErrors { field message }
+        }
+      }`,
+    }),
+  });
+}
+
+async function setVariantPrice(shop, productGid, price) {
+  const client = await getShopifyClient(shop);
+  if (!client) return;
+  const { endpoint, headers } = client;
 
   const varRes = await fetch(endpoint, {
     method: "POST",
@@ -53,13 +75,23 @@ export const action = async ({ request }) => {
   let body;
   try { body = await request.json(); } catch { return Response.json({ ok: false }); }
 
-  const { productId, price } = body;
-  if (!productId || price == null) return Response.json({ ok: false });
+  const { productId, price, depositVariantGid } = body;
 
-  const productGid = String(productId).startsWith("gid://")
-    ? productId
-    : `gid://shopify/Product/${productId}`;
+  // Reset main booking variant price back to pricePerNight
+  if (productId && price != null) {
+    const productGid = String(productId).startsWith("gid://")
+      ? productId
+      : `gid://shopify/Product/${productId}`;
+    await setVariantPrice(session.shop, productGid, price);
+  }
 
-  await setVariantPrice(session.shop, productGid, price);
+  // Reset deposit variant price back to 0
+  if (depositVariantGid) {
+    const client = await getShopifyClient(session.shop);
+    if (client) {
+      await setVariantPriceByGid(depositVariantGid, 0, client.endpoint, client.headers);
+    }
+  }
+
   return Response.json({ ok: true });
 };

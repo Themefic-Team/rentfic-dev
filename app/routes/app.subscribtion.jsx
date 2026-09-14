@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { redirect } from "react-router";
+import { Icon } from "@shopify/polaris";
+import { StarIcon, CheckSmallIcon, XSmallIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getPlanLimits, planKeyFromName } from "../plans.server";
@@ -62,7 +64,7 @@ const PLANS = [
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
-  const { session, billing } = await authenticate.admin(request);
+  const { session, billing, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
   // Get current plan from DB
@@ -76,7 +78,7 @@ export const loader = async ({ request }) => {
   let shopifyPlan = null;
   try {
     const { appSubscriptions } = await billing.check({
-      plans: ["Pro", "Business"],
+      plans: ["Pro", "Pro Yearly", "Business", "Business Yearly"],
       isTest: true,
     });
     if (appSubscriptions?.length > 0) {
@@ -86,6 +88,56 @@ export const loader = async ({ request }) => {
     // billing.check throws when no active subscription — that's fine
   }
 
+  // Fetch real billing history from Shopify
+  let invoices = [];
+  try {
+    const res  = await admin.graphql(`
+      query {
+        currentAppInstallation {
+          allSubscriptions(first: 20) {
+            edges {
+              node {
+                id
+                name
+                status
+                createdAt
+                currentPeriodEnd
+                lineItems {
+                  plan {
+                    pricingDetails {
+                      ... on AppRecurringPricing {
+                        price { amount currencyCode }
+                        interval
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `);
+    const json = await res.json();
+    const edges = json?.data?.currentAppInstallation?.allSubscriptions?.edges ?? [];
+    invoices = edges.map(({ node }) => {
+      const pricing = node.lineItems?.[0]?.plan?.pricingDetails ?? {};
+      return {
+        id:          node.id?.split("/").pop() ?? node.id,
+        fullId:      node.id,
+        name:        node.name,
+        status:      node.status,           // ACTIVE | CANCELLED | DECLINED | EXPIRED | FROZEN | PENDING
+        createdAt:   node.createdAt,
+        periodEnd:   node.currentPeriodEnd,
+        amount:      pricing.price?.amount ?? null,
+        currency:    pricing.price?.currencyCode ?? "USD",
+        interval:    pricing.interval ?? null,           // EVERY_30_DAYS | ANNUAL
+      };
+    });
+  } catch (e) {
+    console.error("[Rentfic] Failed to fetch billing history:", e?.message ?? e);
+  }
+
   const limits = getPlanLimits(currentPlan);
 
   return {
@@ -93,6 +145,7 @@ export const loader = async ({ request }) => {
     shopifyPlan,
     apartmentCount,
     apartmentLimit: limits.apartments,
+    invoices,
   };
 };
 
@@ -101,8 +154,9 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { billing } = await authenticate.admin(request);
   const formData = await request.formData();
-  const plan     = formData.get("plan");       // "Pro" | "Business"
-  const intent   = formData.get("intent");
+  const plan           = formData.get("plan");           // "pro" | "business"
+  const billing_period = formData.get("billing_period"); // "monthly" | "yearly"
+  const intent         = formData.get("intent");
 
   if (intent === "cancel") {
     try {
@@ -114,14 +168,24 @@ export const action = async ({ request }) => {
     return redirect("/app/subscribtion");
   }
 
-  if (plan !== "Pro" && plan !== "Business") {
+  // Map plan key + billing period to the Shopify plan name
+  const planMap = {
+    pro:      { monthly: "Pro",      yearly: "Pro Yearly"      },
+    business: { monthly: "Business", yearly: "Business Yearly" },
+  };
+
+  const planKey        = (plan ?? "").toLowerCase();
+  const period         = billing_period === "yearly" ? "yearly" : "monthly";
+  const shopifyPlanName = planMap[planKey]?.[period];
+
+  if (!shopifyPlanName) {
     return { error: "Invalid plan" };
   }
 
   const url             = new URL(request.url);
   const returnUrl       = `${url.origin}/app/subscribtion`;
   const { confirmationUrl } = await billing.request({
-    plan,
+    plan:   shopifyPlanName,
     isTest: true,
     returnUrl,
   });
@@ -131,16 +195,17 @@ export const action = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SubscriptionPage() {
-  const { currentPlan, apartmentCount, apartmentLimit } = useLoaderData();
+  const { currentPlan, apartmentCount, apartmentLimit, invoices } = useLoaderData();
   const submit      = useSubmit();
   const navigation  = useNavigation();
   const [billing, setBilling] = useState("monthly");
 
   const isSubmitting = navigation.state === "submitting";
 
-  function handleUpgrade(planName) {
+  function handleUpgrade(planKey) {
     const fd = new FormData();
-    fd.append("plan", planName);
+    fd.append("plan", planKey);           // e.g. "pro" | "business"
+    fd.append("billing_period", billing); // "monthly" | "yearly"
     submit(fd, { method: "POST" });
   }
 
@@ -176,12 +241,11 @@ export default function SubscriptionPage() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 18,
                 color: "#fff",
                 flexShrink: 0,
               }}
             >
-              ✦
+              <Icon source={StarIcon} />
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#202223" }}>
@@ -280,7 +344,7 @@ export default function SubscriptionPage() {
             const price = billing === "yearly" && plan.price > 0
               ? Math.round(plan.price * 0.8)
               : plan.price;
-            const planName = plan.name; // "Pro" | "Business" match billing config
+            const planKey = plan.key; // "pro" | "business" — action resolves yearly variant
 
             return (
               <div
@@ -354,8 +418,8 @@ export default function SubscriptionPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, marginBottom: 20 }}>
                   {plan.features.map((f, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 14, color: f.included ? "#008060" : "#c9cccf", flexShrink: 0 }}>
-                        {f.included ? "✓" : "✕"}
+                      <span style={{ color: f.included ? "#008060" : "#c9cccf", flexShrink: 0, display: "flex" }}>
+                        <Icon source={f.included ? CheckSmallIcon : XSmallIcon} />
                       </span>
                       <span style={{ fontSize: 13, color: f.included ? "#202223" : "#c9cccf" }}>
                         {f.text}
@@ -376,12 +440,14 @@ export default function SubscriptionPage() {
                       borderRadius: 8,
                     }}
                   >
-                    ✓ Active
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <Icon source={CheckSmallIcon} /> Active
+                    </span>
                   </div>
                 ) : (
                   <button
                     disabled={isSubmitting}
-                    onClick={() => plan.price > 0 ? handleUpgrade(planName) : undefined}
+                    onClick={() => plan.price > 0 ? handleUpgrade(planKey) : undefined}
                     style={{
                       padding: "10px",
                       background: plan.badge ? "#2c6ecb" : "#202223",
@@ -395,7 +461,11 @@ export default function SubscriptionPage() {
                       width: "100%",
                     }}
                   >
-                    {isSubmitting ? "Redirecting…" : plan.price === 0 ? "Downgrade to Free" : `Upgrade to ${plan.name}`}
+                    {isSubmitting
+                      ? "Redirecting…"
+                      : plan.price === 0
+                        ? "Downgrade to Free"
+                        : `Upgrade to ${plan.name}${billing === "yearly" ? " (Yearly)" : ""}`}
                   </button>
                 )}
               </div>
@@ -441,8 +511,8 @@ export default function SubscriptionPage() {
                   {row.values.map((v, j) => (
                     <td key={j} style={{ ...tdStyle, textAlign: "center" }}>
                       {typeof v === "boolean" ? (
-                        <span style={{ fontSize: 16, color: v ? "#008060" : "#c9cccf" }}>
-                          {v ? "✓" : "✕"}
+                        <span style={{ color: v ? "#008060" : "#c9cccf", display: "inline-flex", justifyContent: "center" }}>
+                          <Icon source={v ? CheckSmallIcon : XSmallIcon} />
                         </span>
                       ) : (
                         <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
@@ -456,34 +526,90 @@ export default function SubscriptionPage() {
         </div>
       </s-section>
 
-      {/* Billing history */}
+      {/* Billing History */}
       <s-section heading="Billing History">
-        <s-paragraph>
-          Your invoices and payment history will appear here once you upgrade to
-          a paid plan.
-        </s-paragraph>
-        <div style={{ border: "1px solid #e1e3e5", borderRadius: 8, overflow: "hidden", marginTop: 8 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
-                <th style={{ ...thStyle, textAlign: "left" }}>Invoice</th>
-                <th style={thStyle}>Date</th>
-                <th style={thStyle}>Plan</th>
-                <th style={thStyle}>Amount</th>
-                <th style={thStyle}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={tdStyle} colSpan={5}>
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "#6d7175", fontSize: 14 }}>
-                    No invoices yet — upgrade to a paid plan to see billing history.
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {invoices.length === 0 ? (
+          <>
+            <s-paragraph>
+              Your invoices and payment history will appear here once you upgrade to a paid plan.
+            </s-paragraph>
+            <div style={{ border: "1px solid #e1e3e5", borderRadius: 8, overflow: "hidden", marginTop: 8 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
+                    <th style={{ ...thStyle, textAlign: "left" }}>Invoice</th>
+                    <th style={thStyle}>Date</th>
+                    <th style={thStyle}>Plan</th>
+                    <th style={thStyle}>Amount</th>
+                    <th style={thStyle}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={tdStyle} colSpan={5}>
+                      <div style={{ textAlign: "center", padding: "24px 0", color: "#6d7175", fontSize: 14 }}>
+                        No invoices yet — upgrade to a paid plan to see billing history.
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div style={{ border: "1px solid #e1e3e5", borderRadius: 8, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
+                  <th style={{ ...thStyle, textAlign: "left" }}>Invoice #</th>
+                  <th style={thStyle}>Date</th>
+                  <th style={thStyle}>Plan</th>
+                  <th style={thStyle}>Billing</th>
+                  <th style={thStyle}>Amount</th>
+                  <th style={thStyle}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv, i) => {
+                  const date = inv.createdAt
+                    ? new Date(inv.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+                    : "—";
+                  const amount = inv.amount != null
+                    ? new Intl.NumberFormat("en-US", { style: "currency", currency: inv.currency }).format(inv.amount)
+                    : "—";
+                  const interval = inv.interval === "ANNUAL" ? "Yearly" : inv.interval === "EVERY_30_DAYS" ? "Monthly" : "—";
+                  const statusCfg = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
+                  return (
+                    <tr key={inv.id} style={{ borderBottom: i < invoices.length - 1 ? "1px solid #f1f2f3" : "none" }}>
+                      <td style={tdStyle}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "monospace", fontSize: 13 }}>
+                          🧾 {inv.id.slice(-8).toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={{ ...tdStyle, color: "#6d7175" }}>{date}</td>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{inv.name}</td>
+                      <td style={{ ...tdStyle, color: "#6d7175" }}>{interval}</td>
+                      <td style={{ ...tdStyle, fontWeight: 700, color: inv.amount > 0 ? "#202223" : "#8c9196" }}>{amount}</td>
+                      <td style={tdStyle}>
+                        <span style={{
+                          display: "inline-block",
+                          padding: "2px 10px",
+                          borderRadius: 12,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          background: statusCfg.bg,
+                          color: statusCfg.color,
+                        }}>
+                          {statusCfg.label}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </s-section>
 
       {/* FAQ */}
@@ -533,4 +659,14 @@ const tdStyle = {
   fontSize: "14px",
   color: "#202223",
   verticalAlign: "middle",
+};
+
+// Shopify AppSubscription status → display config
+const INV_STATUS = {
+  ACTIVE:    { label: "Active",    bg: "#d4edda", color: "#155724" },
+  CANCELLED: { label: "Cancelled", bg: "#f8d7da", color: "#721c24" },
+  DECLINED:  { label: "Declined",  bg: "#f8d7da", color: "#721c24" },
+  EXPIRED:   { label: "Expired",   bg: "#e2e3e5", color: "#383d41" },
+  FROZEN:    { label: "Frozen",    bg: "#fff3cd", color: "#856404" },
+  PENDING:   { label: "Pending",   bg: "#fff3cd", color: "#856404" },
 };

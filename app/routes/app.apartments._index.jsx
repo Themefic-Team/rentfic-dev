@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useLoaderData, useSubmit, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import { Icon } from "@shopify/polaris";
+import { EditIcon, CalendarIcon, ViewIcon, DeleteIcon, DuplicateIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
@@ -46,7 +48,51 @@ export const action = async ({ request }) => {
         }
       );
     }
+    return { success: true };
   }
+
+  if (intent === "bulk") {
+    const ids = JSON.parse(formData.get("ids"));
+    const bulkAction = formData.get("bulkAction");
+    if (bulkAction === "delete") {
+      await prisma.apartment.deleteMany({ where: { shop: session.shop, id: { in: ids } } });
+    } else {
+      await prisma.apartment.updateMany({
+        where: { shop: session.shop, id: { in: ids } },
+        data: { status: bulkAction === "activate" ? "active" : "inactive" },
+      });
+    }
+    return { success: true };
+  }
+  
+  if (intent === "duplicate") {
+    const id = formData.get("id");
+    const source = await prisma.apartment.findUnique({ where: { id } });
+    if (!source) return { error: "Not found" };
+
+    const count = await prisma.apartment.count({ where: { shop: session.shop } });
+    const shopRecord = await prisma.shop.findUnique({ where: { shop: session.shop } });
+    const limits = getPlanLimits(shopRecord?.plan);
+    
+    if (limits.apartments !== Infinity && count >= limits.apartments) {
+      return { error: "Plan limit reached" };
+    }
+
+    await prisma.apartment.create({
+      data: {
+        shop:         source.shop,
+        productId:    source.productId,
+        productTitle: source.productTitle + " (Copy)",
+        name:         source.name + " (Copy)",
+        status:       "draft",
+        pricePerNight: source.pricePerNight,
+        settings:     source.settings ? JSON.parse(JSON.stringify(source.settings)) : {},
+      },
+    });
+
+    return { success: true };
+  }
+
   return { success: true };
 };
 
@@ -63,37 +109,6 @@ function timeAgo(date) {
   return `${months} month${months > 1 ? "s" : ""} ago`;
 }
 
-const IconEdit = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-  </svg>
-);
-
-const IconCalendar = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-    <line x1="16" y1="2" x2="16" y2="6"/>
-    <line x1="8" y1="2" x2="8" y2="6"/>
-    <line x1="3" y1="10" x2="21" y2="10"/>
-  </svg>
-);
-
-const IconEye = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>
-);
-
-const IconCalSmall = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6d7175" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline", verticalAlign: "middle", marginLeft: 3 }}>
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-    <line x1="16" y1="2" x2="16" y2="6"/>
-    <line x1="8" y1="2" x2="8" y2="6"/>
-    <line x1="3" y1="10" x2="21" y2="10"/>
-  </svg>
-);
 
 export default function ApartmentsIndexPage() {
   const { apartments, apartmentLimit } = useLoaderData();
@@ -143,6 +158,16 @@ export default function ApartmentsIndexPage() {
     }
   };
 
+  const submitBulk = (action) => {
+    if (action === "delete" && !confirm("Are you sure you want to delete the selected apartments?")) return;
+    const fd = new FormData();
+    fd.append("intent", "bulk");
+    fd.append("ids", JSON.stringify(Array.from(selected)));
+    fd.append("bulkAction", action);
+    submit(fd, { method: "POST" });
+    setSelected(new Set());
+  };
+
   const handleCreate = async () => {
     if (atLimit) {
       shopify.toast.show(`Free plan allows ${apartmentLimit} apartment. Upgrade to add more.`, { isError: true });
@@ -163,6 +188,16 @@ export default function ApartmentsIndexPage() {
   const handleDelete = (id, name) => {
     if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
       submit({ id, intent: "delete" }, { method: "POST" });
+    }
+  };
+
+  const handleDuplicate = (id, name) => {
+    if (atLimit) {
+      shopify.toast.show(`Free plan allows ${apartmentLimit} apartment. Upgrade to add more.`, { isError: true });
+      return;
+    }
+    if (window.confirm(`Duplicate "${name}"?`)) {
+      submit({ id, intent: "duplicate" }, { method: "POST" });
     }
   };
 
@@ -235,7 +270,7 @@ export default function ApartmentsIndexPage() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <button style={ghostBtnStyle}>
-                <IconEye />
+                <Icon source={ViewIcon} />
                 <span style={{ marginLeft: 6 }}>Show</span>
               </button>
               <div style={{ position: "relative" }}>
@@ -253,6 +288,31 @@ export default function ApartmentsIndexPage() {
 
           {/* Divider */}
           <div style={{ borderBottom: "1px solid #e1e3e5" }} />
+
+          {/* Bulk Actions Bar */}
+          {selected.size > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", background: "#f4f6f8", borderBottom: "1px solid #e1e3e5" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#202223" }}>{selected.size} apartments selected</span>
+              <button
+                onClick={() => submitBulk("activate")}
+                style={{ padding: "5px 12px", fontSize: 13, fontWeight: 500, borderRadius: 4, border: "1px solid #c9cccf", background: "#fff", cursor: "pointer" }}
+              >
+                Activate Selected
+              </button>
+              <button
+                onClick={() => submitBulk("deactivate")}
+                style={{ padding: "5px 12px", fontSize: 13, fontWeight: 500, borderRadius: 4, border: "1px solid #c9cccf", background: "#fff", cursor: "pointer" }}
+              >
+                Deactivate Selected
+              </button>
+              <button
+                onClick={() => submitBulk("delete")}
+                style={{ padding: "5px 12px", fontSize: 13, fontWeight: 500, borderRadius: 4, border: "1px solid #c9cccf", background: "#fff", color: "#d82c0d", cursor: "pointer", marginLeft: "auto" }}
+              >
+                Delete Selected
+              </button>
+            </div>
+          )}
 
           {/* Rows */}
           {paginated.length === 0 ? (
@@ -286,6 +346,7 @@ export default function ApartmentsIndexPage() {
                 <div style={thumbStyle} />
 
                 {/* Title */}
+                {console.log(apt)}
                 <div style={{ minWidth: 120, flex: "0 0 auto" }}>
                   <div style={{ fontWeight: 600, fontSize: 14, color: "#202223" }}>
                     {apt.productTitle}
@@ -299,15 +360,7 @@ export default function ApartmentsIndexPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flex: 1 }}>
                   <span style={badge("#f6f6f7", "#202223")}>Apartment</span>
 
-                  {/* Duration range */}
-                  <span style={{ fontSize: 13, color: "#202223", display: "flex", alignItems: "center", gap: 4 }}>
-                    <strong>{apt.settings?.minNights ?? 1}</strong>
-                    <IconCalSmall />
-                    <span style={{ color: "#6d7175" }}>›</span>
-                    <strong>{apt.settings?.maxNights ?? "365"}</strong>
-                    <IconCalSmall />
-                  </span>
-
+                 
                   {/* Status */}
                   <span style={statusBadge(apt.status)}>
                     {apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}
@@ -325,25 +378,32 @@ export default function ApartmentsIndexPage() {
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
                   <div style={{ display: "flex", gap: 4 }}>
                     <button
+                      title="Duplicate"
+                      onClick={() => handleDuplicate(apt.id, apt.name)}
+                      style={iconBtnStyle}
+                    >
+                      <Icon source={DuplicateIcon} />
+                    </button>
+                    <button
                       title="Edit"
                       onClick={() => navigate(`/app/apartments/${apt.id}`)}
                       style={iconBtnStyle}
                     >
-                      <IconEdit />
+                      <Icon source={EditIcon} />
                     </button>
                     <button
                       title="Availability"
                       onClick={() => navigate(`/app/apartments/${apt.id}`)}
                       style={iconBtnStyle}
                     >
-                      <IconCalendar />
+                      <Icon source={CalendarIcon} />
                     </button>
                     <button
                       title="Delete"
                       onClick={() => handleDelete(apt.id, apt.name)}
                       style={{ ...iconBtnStyle, color: "#c0392b" }}
                     >
-                      <IconEye />
+                      <Icon source={DeleteIcon} tone="critical" />
                     </button>
                   </div>
                   <span style={{ fontSize: 11, color: "#8c9196" }}>{timeAgo(apt.createdAt)}</span>

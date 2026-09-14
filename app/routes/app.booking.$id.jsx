@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { sendNotification } from "../email.server";
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -39,6 +41,7 @@ export const loader = async ({ request, params }) => {
       guests:        booking.lineItemProperties?.guests ?? {},
       dates:         booking.lineItemProperties?.dates ?? null,
       createdAt:     booking.createdAt,
+      notes:         booking.notes ?? "",
     },
     shop: session.shop,
   };
@@ -47,12 +50,85 @@ export const loader = async ({ request, params }) => {
 export const action = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
   const fd     = await request.formData();
-  const status = fd.get("status");
+  const intent = fd.get("intent");
 
+  // ── Edit booking details ───────────────────────────────────────────────────
+  if (intent === "edit") {
+    const startDate = fd.get("startDate") || undefined;
+    const endDate   = fd.get("endDate")   || undefined;
+    const nights =
+      startDate && endDate
+        ? Math.round((new Date(endDate) - new Date(startDate)) / 86_400_000)
+        : undefined;
+
+    await prisma.booking.update({
+      where: { id: params.id, shop: session.shop },
+      data: {
+        customerName:  fd.get("customerName")  || undefined,
+        customerEmail: fd.get("customerEmail") || undefined,
+        startDate,
+        endDate,
+        nights:        nights ?? undefined,
+        notes:         fd.get("notes") ?? undefined,
+      },
+    });
+
+    return { success: true, edited: true };
+  }
+
+  // ── Change status ──────────────────────────────────────────────────────────
+  const newStatus = fd.get("status");
+
+  // Fetch the booking BEFORE updating so we can check the previous status
+  const booking = await prisma.booking.findFirst({
+    where: { id: params.id, shop: session.shop },
+  });
+
+  if (!booking) return { success: false, error: "Booking not found" };
+
+  // Update status in DB
   await prisma.booking.update({
     where: { id: params.id, shop: session.shop },
-    data: { status },
+    data:  { status: newStatus },
   });
+
+  // ── Fire cancellation emails when status changes TO "cancelled" ──────────
+  if (newStatus === "cancelled" && booking.status !== "cancelled") {
+    const [firstName, ...rest] = (booking.customerName || "").split(" ");
+    const vars = {
+      "date":               booking.startDate,
+      "start":              booking.startDate,
+      "end":                booking.endDate ?? booking.startDate,
+      "product.name":       booking.productTitle  ?? "",
+      "order.name":         booking.orderNumber ? `#${booking.orderNumber}` : "",
+      "customer.firstName": firstName || "",
+      "customer.lastName":  rest.join(" ") || "",
+    };
+
+    // 1. Guest cancellation email
+    if (booking.customerEmail) {
+      await sendNotification(
+        session.shop,
+        "bookingCancelled",
+        vars,
+        { to: booking.customerEmail }
+      ).catch((e) => console.error("[Rentfic] Guest cancel email failed:", e));
+    }
+
+    // 2. Shop-owner cancellation alert
+    const shopRecord = await prisma.shop.findUnique({
+      where:  { shop: session.shop },
+      select: { email: true },
+    });
+    if (shopRecord?.email) {
+      await sendNotification(
+        session.shop,
+        "ownerBookingCancelled",
+        vars,
+        { to: shopRecord.email }
+      ).catch((e) => console.error("[Rentfic] Owner cancel email failed:", e));
+    }
+  }
 
   return { success: true };
 };
@@ -78,8 +154,24 @@ const STATUS_OPTIONS = ["pending", "confirmed", "completed", "cancelled"];
 
 export default function BookingDetail() {
   const { booking, shop } = useLoaderData();
-  const navigate = useNavigate();
-  const fetcher  = useFetcher();
+  const navigate  = useNavigate();
+  const fetcher   = useFetcher();
+
+  // ── Edit state ─────────────────────────────────────────────────────────────
+  const [editing,    setEditing]    = useState(false);
+  const [guestName,  setGuestName]  = useState(booking.guest === "—" ? "" : booking.guest);
+  const [guestEmail, setGuestEmail] = useState(booking.email ?? "");
+  const [checkIn,    setCheckIn]    = useState(booking.checkIn  ?? "");
+  const [checkOut,   setCheckOut]   = useState(booking.checkOut ?? "");
+  const [notes,      setNotes]      = useState(booking.notes    ?? "");
+
+  // Auto-calculate nights whenever dates change
+  const calcNights =
+    checkIn && checkOut
+      ? Math.max(0, Math.round((new Date(checkOut) - new Date(checkIn)) / 86_400_000))
+      : booking.nights;
+
+  const isSaving = fetcher.state !== "idle";
 
   const orderAdminUrl = booking.shopifyOrderId
     ? `https://${shop}/admin/orders/${booking.shopifyOrderId}`
@@ -89,6 +181,27 @@ export default function BookingDetail() {
     const fd = new FormData();
     fd.append("status", status);
     fetcher.submit(fd, { method: "POST" });
+  };
+
+  const handleEdit = () => {
+    const fd = new FormData();
+    fd.append("intent",        "edit");
+    fd.append("customerName",  guestName);
+    fd.append("customerEmail", guestEmail);
+    fd.append("startDate",     checkIn);
+    fd.append("endDate",       checkOut);
+    fd.append("notes",         notes);
+    fetcher.submit(fd, { method: "POST" });
+    setEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setGuestName(booking.guest === "—" ? "" : booking.guest);
+    setGuestEmail(booking.email ?? "");
+    setCheckIn(booking.checkIn  ?? "");
+    setCheckOut(booking.checkOut ?? "");
+    setNotes(booking.notes ?? "");
+    setEditing(false);
   };
 
   return (
@@ -110,7 +223,14 @@ export default function BookingDetail() {
 
           {/* Booking info card */}
           <div style={card}>
-            <div style={cardHeading}>Booking Information</div>
+            <div style={{ ...cardHeading, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Booking Information</span>
+              {!editing && (
+                <button onClick={() => setEditing(true)} style={editBtn}>
+                  ✏️ Edit
+                </button>
+              )}
+            </div>
 
             <Row label="Booking ID"   value={<code style={{ fontSize: 13, background: "#f6f6f7", padding: "2px 6px", borderRadius: 4 }}>{booking.id}</code>} />
             <Row label="Apartment"    value={booking.apartment} />
@@ -141,29 +261,123 @@ export default function BookingDetail() {
           {/* Dates card */}
           <div style={card}>
             <div style={cardHeading}>Dates</div>
-            <Row label="Check-in"  value={booking.checkInFmt} />
-            <Row label="Check-out" value={booking.checkOutFmt} />
-            <Row label="Nights"    value={booking.nights} />
-            {booking.dates && (
-              <Row label="Selected dates" value={
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {booking.dates.map((d) => (
-                    <span key={d} style={{ fontSize: 12, background: "#f1f2f3", padding: "2px 8px", borderRadius: 6 }}>{d}</span>
-                  ))}
+            {editing ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 8 }}>
+                <label style={labelStyle}>
+                  Check-in
+                  <input
+                    type="date"
+                    value={checkIn}
+                    onChange={(e) => setCheckIn(e.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={labelStyle}>
+                  Check-out
+                  <input
+                    type="date"
+                    value={checkOut}
+                    min={checkIn || undefined}
+                    onChange={(e) => setCheckOut(e.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
+                <div style={{ fontSize: 13, color: "#6d7175" }}>
+                  Nights: <strong style={{ color: "#202223" }}>{calcNights}</strong>
                 </div>
-              } />
+              </div>
+            ) : (
+              <>
+                <Row label="Check-in"  value={booking.checkInFmt} />
+                <Row label="Check-out" value={booking.checkOutFmt} />
+                <Row label="Nights"    value={booking.nights} />
+                {booking.dates && (
+                  <Row label="Selected dates" value={
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {booking.dates.map((d) => (
+                        <span key={d} style={{ fontSize: 12, background: "#f1f2f3", padding: "2px 8px", borderRadius: 6 }}>{d}</span>
+                      ))}
+                    </div>
+                  } />
+                )}
+              </>
             )}
           </div>
 
           {/* Guest card */}
           <div style={card}>
             <div style={cardHeading}>Guest</div>
-            <Row label="Name"  value={booking.guest} />
-            {booking.email && <Row label="Email" value={<a href={`mailto:${booking.email}`} style={{ color: "#005bd3" }}>{booking.email}</a>} />}
-            {booking.guests?.adults   != null && <Row label="Adults"   value={booking.guests.adults} />}
-            {booking.guests?.children != null && <Row label="Children" value={booking.guests.children} />}
-            {booking.guests?.infants  != null && <Row label="Infants"  value={booking.guests.infants} />}
-            <Row label="Units / Quantity" value={booking.quantity} />
+            {editing ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 8 }}>
+                <label style={labelStyle}>
+                  Guest Name
+                  <input
+                    type="text"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="Full name"
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={labelStyle}>
+                  Guest Email
+                  <input
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                    placeholder="email@example.com"
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={labelStyle}>
+                  Internal Notes
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Add any internal notes about this booking…"
+                    rows={3}
+                    style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
+                  />
+                </label>
+                {/* Save / Cancel buttons */}
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <button
+                    onClick={handleEdit}
+                    disabled={isSaving}
+                    style={{
+                      flex: 1, padding: "9px 0", background: "#008060", color: "#fff",
+                      border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600,
+                      cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.7 : 1,
+                    }}
+                  >
+                    {isSaving ? "Saving…" : "Save Changes"}
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    disabled={isSaving}
+                    style={{
+                      flex: 1, padding: "9px 0", background: "#fff", color: "#202223",
+                      border: "1px solid #c9cccf", borderRadius: 7, fontSize: 13, fontWeight: 600,
+                      cursor: isSaving ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Row label="Name"  value={booking.guest} />
+                {booking.email && <Row label="Email" value={<a href={`mailto:${booking.email}`} style={{ color: "#005bd3" }}>{booking.email}</a>} />}
+                {booking.guests?.adults   != null && <Row label="Adults"   value={booking.guests.adults} />}
+                {booking.guests?.children != null && <Row label="Children" value={booking.guests.children} />}
+                {booking.guests?.infants  != null && <Row label="Infants"  value={booking.guests.infants} />}
+                <Row label="Units / Quantity" value={booking.quantity} />
+                {booking.notes && (
+                  <Row label="Notes" value={<span style={{ color: "#6d7175", fontStyle: "italic" }}>{booking.notes}</span>} />
+                )}
+              </>
+            )}
           </div>
 
         </div>
@@ -249,4 +463,35 @@ const cardHeading = {
   marginBottom: 4,
   paddingBottom: 10,
   borderBottom: "1px solid #e1e3e5",
+};
+
+const editBtn = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: "#005bd3",
+  background: "none",
+  border: "1px solid #005bd3",
+  borderRadius: 6,
+  padding: "4px 10px",
+  cursor: "pointer",
+};
+
+const labelStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  fontSize: 13,
+  fontWeight: 600,
+  color: "#202223",
+};
+
+const inputStyle = {
+  padding: "7px 10px",
+  border: "1px solid #c9cccf",
+  borderRadius: 6,
+  fontSize: 13,
+  color: "#202223",
+  background: "#fff",
+  width: "100%",
+  boxSizing: "border-box",
 };
