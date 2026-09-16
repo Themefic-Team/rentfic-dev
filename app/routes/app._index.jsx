@@ -62,6 +62,34 @@ export const loader = async ({ request }) => {
     ? (recentBookings.reduce((sum, b) => sum + (b.nights ?? 0), 0) / recentBookings.length).toFixed(1)
     : "0";
 
+  // Check if app embed is enabled
+  let isEmbedEnabled = true; // Default to true to prevent blocking if API fails
+  try {
+    const themeRes = await admin.rest.get({ path: "themes.json" });
+    const themesData = await themeRes.json();
+    const mainTheme = themesData?.themes?.find(t => t.role === "main");
+    
+    if (mainTheme) {
+      const assetRes = await admin.rest.get({
+        path: `themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`
+      });
+      const assetJson = await assetRes.json();
+      const content = assetJson?.asset?.value;
+      if (content) {
+        const settingsData = JSON.parse(content);
+        if (settingsData?.current?.blocks) {
+          isEmbedEnabled = Object.values(settingsData.current.blocks).some(
+            (b) => b.type && b.type.includes("app_embed") && !b.disabled
+          );
+        } else {
+          isEmbedEnabled = false;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Theme embed check failed", err);
+  }
+
   return {
     appPlan,
     apartmentCount,
@@ -76,6 +104,9 @@ export const loader = async ({ request }) => {
       avgNights,
     },
     recentBookings,
+    isEmbedEnabled,
+    shopifyApiKey: process.env.SHOPIFY_API_KEY,
+    shop,
   };
 };
 
@@ -89,7 +120,7 @@ const STATUS_STYLE = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { stats, recentBookings, ...planData } = useLoaderData();
+  const { stats, recentBookings, isEmbedEnabled, shopifyApiKey, shop, ...planData } = useLoaderData();
   const navigate = useNavigate();
 
   const overviewStats = [
@@ -99,8 +130,47 @@ export default function DashboardPage() {
     { label: "Avg. Nights / Stay", value: `${stats.avgNights} nights` },
   ];
 
+  const activateEmbedUrl = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${shopifyApiKey}/app_embed`;
+
   return (
     <s-page heading="Dashboard">
+      {!isEmbedEnabled && (
+        <div style={{
+          background: "#fff4f4",
+          border: "1px solid #fead9a",
+          padding: "20px",
+          borderRadius: "8px",
+          marginBottom: "24px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          alignItems: "flex-start"
+        }}>
+          <div style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>
+            Enable the Rentfic App Embed
+          </div>
+          <div style={{ fontSize: "14px", color: "#6d7175" }}>
+            The booking widget is not currently enabled on your storefront. You must activate the App Embed block in your Theme Editor so customers can book your apartments.
+          </div>
+          <a
+            href={activateEmbedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: "#000",
+              color: "#fff",
+              padding: "8px 16px",
+              borderRadius: "4px",
+              textDecoration: "none",
+              fontSize: "14px",
+              fontWeight: "600"
+            }}
+          >
+            Activate App Embed →
+          </a>
+        </div>
+      )}
+
       <PlanCard data={planData} />
 
       {/* Stats */}
