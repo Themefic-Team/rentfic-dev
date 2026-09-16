@@ -1,7 +1,7 @@
 /* ── Rentfic Booking Widget ───────────────────────────────────── */
 .rentfic-widget {
   --rf-primary: #008060;
-  --rf-primary-light: #e6f4f0;
+  --rf-primary-light: color-mix(in srgb, var(--rf-primary) 12%, transparent);
   --rf-border: #e5e7eb;
   --rf-text: #1a1a1a;
   --rf-muted: #6b7280;
@@ -293,6 +293,13 @@
   border-radius: 20px;
   padding: 4px 10px;
   white-space: nowrap;
+}
+
+.rf-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  flex-shrink: 0;
 }
 
 /* ── Amenities section ───────────────────────────────────────── */

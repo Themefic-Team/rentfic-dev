@@ -8,6 +8,17 @@
   const DAY_NAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const WEEK_DAYS  = ['sun','mon','tue','wed','thu','fri','sat'];
 
+  const ICONS = {
+    bed: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="rf-icon"><path fill-rule="evenodd" d="M8.344 3.692a2.25 2.25 0 0 1 3.312 0l3.854 4.19a3.75 3.75 0 0 1 .99 2.538v3.33a2.75 2.75 0 0 1-2.75 2.75h-1.75a1.5 1.5 0 0 1-1.5-1.5v-2h-1v2a1.5 1.5 0 0 1-1.5 1.5h-1.75a2.75 2.75 0 0 1-2.75-2.75v-3.33c0-.94.353-1.847.99-2.539l3.854-4.189Zm2.208 1.016a.75.75 0 0 0-1.104 0l-3.854 4.189a2.25 2.25 0 0 0-.594 1.523v3.33c0 .69.56 1.25 1.25 1.25h1.75v-2a1.5 1.5 0 0 1 1.5-1.5h1a1.5 1.5 0 0 1 1.5 1.5v2h1.75c.69 0 1.25-.56 1.25-1.25v-3.33a2.25 2.25 0 0 0-.594-1.523l-3.854-4.19Z"/></svg>',
+    bath: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="rf-icon"><path fill-rule="evenodd" d="M10 2c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11zm0 15a4 4 0 0 1-4-4c0-2.2 1.3-4.6 4-8.3 2.7 3.7 4 6.1 4 8.3a4 4 0 0 1-4 4z"/></svg>',
+    person: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="rf-icon"><path fill-rule="evenodd" d="M10 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm0-1.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/><path fill-rule="evenodd" d="M8.827 16h-3.077a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-3.077l.07-.061a17.427 17.427 0 0 0 1.707-1.758c1.224-1.46 2.55-3.574 2.55-5.954 0-3.167-2.328-5.477-5.5-5.477s-5.5 2.31-5.5 5.477c0 2.38 1.326 4.495 2.55 5.954a17.426 17.426 0 0 0 1.777 1.819Zm1.173-11.75c-2.35 0-4 1.646-4 3.977 0 1.846 1.049 3.618 2.2 4.99a15.919 15.919 0 0 0 1.8 1.816 15.92 15.92 0 0 0 1.8-1.817c1.151-1.371 2.2-3.143 2.2-4.99 0-2.33-1.65-3.976-4-3.976Z"/></svg>',
+    key: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="rf-icon"><path d="M10 7.75a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/><path fill-rule="evenodd" d="M8.85 2.75a4.35 4.35 0 0 0-4.35 4.35 3.401 3.401 0 0 0 2.5 3.28v3.435a2 2 0 0 0 .481 1.302l1.07 1.247a2 2 0 0 0 2.746.277l1.309-1.018a2.002 2.002 0 0 0 .376-2.776 2.004 2.004 0 0 0 .002-2.463 3.401 3.401 0 0 0 2.516-3.284 4.35 4.35 0 0 0-4.35-4.35h-2.3Zm2.835 11.69a.5.5 0 0 0-.042-.82l-.637-.397a.5.5 0 0 1 .041-.872l.582-.29a.5.5 0 0 0 .13-.802l-.613-.613a.5.5 0 0 1-.146-.353v-.793a.5.5 0 0 1 .5-.5h.6a1.9 1.9 0 0 0 1.9-1.9 2.85 2.85 0 0 0-2.85-2.85h-2.3a2.85 2.85 0 0 0-2.85 2.85c0 1.05.85 1.9 1.9 1.9h.1a.5.5 0 0 1 .5.5v4.315a.5.5 0 0 0 .12.325l1.07 1.248a.5.5 0 0 0 .686.07l1.31-1.019Z"/></svg>',
+    door: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="rf-icon"><path d="M9.75 3c-1.243 0-2.25 1.007-2.25 2.25 0 .414.336.75.75.75s.75-.336.75-.75.336-.75.75-.75h3.5c.69 0 1.25.56 1.25 1.25v8.5c0 .69-.56 1.25-1.25 1.25h-3.5c-.414 0-.75-.336-.75-.75s-.336-.75-.75-.75-.75.336-.75.75c0 1.243 1.007 2.25 2.25 2.25h3.5c1.519 0 2.75-1.231 2.75-2.75v-8.5c0-1.519-1.231-2.75-2.75-2.75h-3.5Z"/><path d="M12.25 10.75c.414 0 .75-.336.75-.75s-.336-.75-.75-.75h-5.69l.97-.97c.293-.293.293-.767 0-1.06-.293-.293-.767-.293-1.06 0l-2.25 2.25c-.141.14-.22.331-.22.53s.079.39.22.53l2.25 2.25c.293.293.767.293 1.06 0 .293-.293.293-.767 0-1.06l-.97-.97h5.69Z"/></svg>',
+    calendar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="rf-icon"><path fill-rule="evenodd" d="M7.75 3.5a.75.75 0 0 0-1.5 0v.407a3.075 3.075 0 0 0-.702.252 3.75 3.75 0 0 0-1.64 1.639c-.226.444-.32.924-.365 1.47-.043.531-.043 1.187-.043 2v1.464c0 .813 0 1.469.043 2 .045.546.14 1.026.366 1.47a3.75 3.75 0 0 0 1.639 1.64c.444.226.924.32 1.47.365.531.043 1.187.043 2 .043h3.383c.323 0 .542 0 .735-.02a3.75 3.75 0 0 0 3.344-3.344c.02-.193.02-.412.02-.735v-2.883c0-.813 0-1.469-.043-2-.045-.546-.14-1.026-.366-1.47a3.75 3.75 0 0 0-1.639-1.64 3.076 3.076 0 0 0-.702-.251v-.407a.75.75 0 0 0-1.5 0v.259c-.373-.009-.794-.009-1.268-.009h-1.964c-.474 0-.895 0-1.268.009v-.259Zm-1.521 1.995c.197-.1.458-.17.912-.207.462-.037 1.057-.038 1.909-.038h1.9c.853 0 1.447 0 1.91.038.453.037.714.107.912.207.423.216.767.56.983.984.1.197.17.458.207.912.014.18.024.38.029.609h-9.982c.006-.228.015-.429.03-.61.036-.453.106-.714.206-.911a2.25 2.25 0 0 1 .984-.984Zm-1.229 4.005v1.2c0 .853 0 1.447.038 1.91.037.453.107.714.207.912.216.423.56.767.984.983.197.1.458.17.912.207.462.037 1.057.038 1.909.038h3.306c.385 0 .52-.001.626-.012a2.25 2.25 0 0 0 2.006-2.006c.011-.106.012-.241.012-.626v-2.606h-10Z"/></svg>',
+    moon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="rf-icon"><path d="M9.636 3.191a.75.75 0 0 1 .104.787 5.5 5.5 0 0 0 6.28 7.625.75.75 0 0 1 .856 1.04 7.001 7.001 0 1 1-7.992-9.705.75.75 0 0 1 .752.253Zm-1.759 1.723a5.5 5.5 0 1 0 6.866 8.336 7 7 0 0 1-6.866-8.336Z"/></svg>',
+    location: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="rf-icon"><path fill-rule="evenodd" d="M10 3a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm-2 3.5a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z"/><path fill-rule="evenodd" d="M15.484 14.227a6.274 6.274 0 0 0-10.968 0l-.437.786a1.338 1.338 0 0 0 1.17 1.987h9.502a1.338 1.338 0 0 0 1.17-1.987l-.437-.786Zm-9.657.728a4.773 4.773 0 0 1 8.346 0l.302.545h-8.95l.302-.545Z"/></svg>'
+  };
+
   // ─── i18n dictionary ─────────────────────────────────────────────────────────
   const I18N = {
     en: {
@@ -773,13 +784,13 @@
     _renderInfoStrip() {
       const { bedrooms, bathrooms, maxGuests, checkInTime, checkOutTime, minDays, city, country } = this.apartment;
       const items = [];
-      if (bedrooms)    items.push(`🛏 ${bedrooms} bed${bedrooms !== 1 ? 's' : ''}`);
-      if (bathrooms)   items.push(`🚿 ${bathrooms} bath${bathrooms !== 1 ? 's' : ''}`);
-      if (maxGuests)   items.push(`👥 Max ${maxGuests} guests`);
-      if (checkInTime)  items.push(`🔑 Check-in ${this._fmtTime(checkInTime)}`);
-      if (checkOutTime) items.push(`🚪 Check-out ${this._fmtTime(checkOutTime)}`);
-      if (minDays > 1) items.push(this.apartment.bookingType === 'multiple' ? `📅 Min ${minDays} dates` : `🌙 Min ${minDays} nights`);
-      if (city || country) items.push(`📍 ${[city, country].filter(Boolean).join(', ')}`);
+      if (bedrooms)    items.push(`${ICONS.bed} ${bedrooms} bed${bedrooms !== 1 ? 's' : ''}`);
+      if (bathrooms)   items.push(`${ICONS.bath} ${bathrooms} bath${bathrooms !== 1 ? 's' : ''}`);
+      if (maxGuests)   items.push(`${ICONS.person} Max ${maxGuests} guests`);
+      if (checkInTime)  items.push(`${ICONS.key} Check-in ${this._fmtTime(checkInTime)}`);
+      if (checkOutTime) items.push(`${ICONS.door} Check-out ${this._fmtTime(checkOutTime)}`);
+      if (minDays > 1) items.push(this.apartment.bookingType === 'multiple' ? `${ICONS.calendar} Min ${minDays} dates` : `${ICONS.moon} Min ${minDays} nights`);
+      if (city || country) items.push(`${ICONS.location} ${[city, country].filter(Boolean).join(', ')}`);
       if (!items.length) return '';
       return `
         <div class="rf-info-strip">

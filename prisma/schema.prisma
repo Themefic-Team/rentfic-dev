@@ -80,6 +80,7 @@ model Booking {
   balanceStatus       String?  // pending | invoiced | paid
   status              String   @default("pending")  // pending | confirmed | cancelled
   lineItemProperties  Json?
+  notes               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

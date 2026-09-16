@@ -11,14 +11,14 @@ import { PlanCard } from "../components/PlanCard";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: "bookingConfirmation",   label: "Booking Confirmation"    },
-  { key: "bookingReminder",       label: "Booking Reminder"        },
-  { key: "checkinDay",            label: "Check-in Day"            },
-  { key: "checkoutReminder",      label: "Check-out Reminder"      },
-  { key: "bookingCancelled",      label: "Cancellation (Guest)"    },
-  { key: "ownerBookingCancelled", label: "Cancellation (Owner)"    },
-  { key: "ownerNewBooking",       label: "New Booking Alert"       },
-  { key: "reviewRequest",         label: "Review Request"          },
+  { key: "bookingConfirmation",   label: "Booking Confirmation" },
+  { key: "ownerNewBooking",       label: "New Booking Alert"    },
+  { key: "bookingReminder",       label: "Booking Reminder"     },
+  { key: "checkinDay",            label: "Check-in Day"         },
+  { key: "checkoutReminder",      label: "Check-out Reminder"   },
+  { key: "bookingCancelled",      label: "Cancellation"         },
+  { key: "ownerBookingCancelled", label: "Cancellation"         },
+  { key: "reviewRequest",         label: "Review Request"       },
 ];
 
 const TAB_META = {
@@ -109,6 +109,7 @@ export default function NotificationsPage() {
       TABS.map(({ key }) => [key, { ...DEFAULT_TEMPLATES[key], ...(savedTpls[key] ?? {}) }])
     );
 
+  const [mainTab,        setMainTab]        = useState("Guest");
   const [activeTab,      setActiveTab]      = useState(TABS[0].key);
   const [templates,      setTemplates]      = useState(buildTemplates);
   const [emailProvider,  setEmailProvider]  = useState(config?.emailProvider  ?? "default");
@@ -234,7 +235,35 @@ export default function NotificationsPage() {
             booking. Click a tab to edit that template.
           </s-paragraph>
 
-          {/* Tab bar */}
+          {/* ── Main Tab Switcher (Admin vs Guest) ── */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+            {["Guest", "Owner"].map((role) => (
+              <button
+                key={role}
+                onClick={() => {
+                  setMainTab(role);
+                  const firstTabForRole = TABS.find((t) => TAB_META[t.key].recipient === role);
+                  if (firstTabForRole) setActiveTab(firstTabForRole.key);
+                }}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  background: mainTab === role ? "#303030" : "#fff",
+                  color: mainTab === role ? "#fff" : "#202223",
+                  border: "1px solid",
+                  borderColor: mainTab === role ? "#303030" : "#c9cccf",
+                  transition: "all 0.2s",
+                }}
+              >
+                {role === "Owner" ? "Admin Notifications" : "Guest Notifications"}
+              </button>
+            ))}
+          </div>
+
+          {/* Sub Tab bar */}
           <div
             style={{
               display: "flex",
@@ -242,10 +271,9 @@ export default function NotificationsPage() {
               gap: 4,
               borderBottom: "2px solid #e1e3e5",
               marginBottom: 20,
-              marginTop: 12,
             }}
           >
-            {TABS.map(({ key, label }) => (
+            {TABS.filter((t) => TAB_META[t.key].recipient === mainTab).map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}

@@ -1,6 +1,6 @@
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useRouteError, useLoaderData } from "react-router";
+import { useRouteError, useLoaderData, useNavigate } from "react-router";
 import { PlanCard } from "../components/PlanCard";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
@@ -90,6 +90,7 @@ const STATUS_STYLE = {
 
 export default function DashboardPage() {
   const { stats, recentBookings, ...planData } = useLoaderData();
+  const navigate = useNavigate();
 
   const overviewStats = [
     { label: "Total Bookings",     value: stats.totalBookings },
@@ -127,8 +128,16 @@ export default function DashboardPage() {
 
       {/* Recent bookings */}
       <s-section heading="Recent Bookings">
-        <s-paragraph>Latest bookings across all apartments.</s-paragraph>
-        <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden", marginTop: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <s-paragraph>Latest bookings across all apartments.</s-paragraph>
+          <a
+            href="/app/booking"
+            style={{ fontSize: 13, fontWeight: 600, color: "#005bd3", textDecoration: "none" }}
+          >
+            View All Bookings →
+          </a>
+        </div>
+        <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden", marginTop: "4px" }}>
           {recentBookings.length === 0 ? (
             <div style={{ padding: "24px", textAlign: "center", color: "#6d7175", fontSize: "14px" }}>
               No bookings yet.
@@ -146,7 +155,14 @@ export default function DashboardPage() {
                 {recentBookings.map((b, i) => (
                   <tr
                     key={b.id}
-                    style={{ borderBottom: i < recentBookings.length - 1 ? "1px solid #e1e3e5" : "none" }}
+                    onClick={() => navigate(`/app/booking/${b.id}`)}
+                    style={{
+                      borderBottom: i < recentBookings.length - 1 ? "1px solid #e1e3e5" : "none",
+                      cursor: "pointer",
+                      transition: "background 0.15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "#f9fafb"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
                   >
                     <td style={tdStyle}>{b.orderNumber ? `#${b.orderNumber}` : <span style={{ color: "#8c9196", fontSize: 12 }}>{b.id.slice(-6).toUpperCase()}</span>}</td>
                     <td style={tdStyle}>{b.customerName ?? b.customerEmail ?? <span style={{ color: "#8c9196" }}>—</span>}</td>
