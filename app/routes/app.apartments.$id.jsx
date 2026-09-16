@@ -144,78 +144,83 @@ async function setRentficMetafields(admin, productId, settings = {}) {
 }
 
 export const action = async ({ request, params }) => {
-  const { session, admin } = await authenticate.admin(request);
-  const fd = await request.formData();
+  try {
+    const { session, admin } = await authenticate.admin(request);
+    const fd = await request.formData();
 
-  // Top-level queryable columns
-  const pricePerNight = fd.get("pricePerNight") ? parseFloat(fd.get("pricePerNight")) : null;
-  const core = {
-    shop: session.shop,
-    productId: fd.get("productId"),
-    productTitle: fd.get("productTitle"),
-    name: fd.get("name") || "",
-    status: fd.get("status") || "active",
-    pricePerNight,
-  };
+    // Top-level queryable columns
+    const pricePerNight = fd.get("pricePerNight") ? parseFloat(fd.get("pricePerNight")) : null;
+    const core = {
+      shop: session.shop,
+      productId: fd.get("productId"),
+      productTitle: fd.get("productTitle"),
+      name: fd.get("name") || "",
+      status: fd.get("status") || "active",
+      pricePerNight,
+    };
 
-  // Everything else goes into the settings JSON blob
-  const settings = {
-    description: fd.get("description") || null,
-    bookingType: fd.get("bookingType") || "single",
-    // availability
-    calendarStartDate: fd.get("calendarStartDate") || null,
-    calendarEndDate: fd.get("calendarEndDate") || null,
-    checkInTime: fd.get("checkInTime") || null,
-    checkOutTime: fd.get("checkOutTime") || null,
-    minDays: fd.get("minDays") ? parseInt(fd.get("minDays")) : 1,
-    maxDays: fd.get("maxDays") ? parseInt(fd.get("maxDays")) : null,
-    maxAdults: fd.get("maxAdults") ? parseInt(fd.get("maxAdults")) : null,
-    maxChildren: fd.get("maxChildren") ? parseInt(fd.get("maxChildren")) : null,
-    maxInfants: fd.get("maxInfants") ? parseInt(fd.get("maxInfants")) : null,
-    quantityEnabled: fd.get("quantityEnabled") === "true",
-    weeklyAvailability: JSON.parse(fd.get("weeklyAvailability") || "null"),
-    // block dates
-    blockedDates: JSON.parse(fd.get("blockedDates") || "[]"),
-    // stock / capacity
-    bedrooms: fd.get("bedrooms") ? parseInt(fd.get("bedrooms")) : null,
-    bathrooms: fd.get("bathrooms") ? parseInt(fd.get("bathrooms")) : null,
-    maxGuests: fd.get("maxGuests") ? parseInt(fd.get("maxGuests")) : null,
-    stockQuantity: fd.get("stockQuantity") ? parseInt(fd.get("stockQuantity")) : null,
-    // location
-    address: fd.get("address") || null,
-    city: fd.get("city") || null,
-    country: fd.get("country") || null,
-    // amenities
-    amenities: fd.getAll("amenities"),
-    // additional fees
-    additionalFees: JSON.parse(fd.get("additionalFees") || "[]"),
-    // discounts
-    discountedDates: JSON.parse(fd.get("discountedDates") || "[]"),
-    conditionalDiscounts: JSON.parse(fd.get("conditionalDiscounts") || "[]"),
-    // deposit
-    depositEnabled: fd.get("depositEnabled") === "true",
-    depositType: fd.get("depositType") || "percent",
-    depositAmount: fd.get("depositAmount") ? parseFloat(fd.get("depositAmount")) : null,
-    // balance collection
-    balanceAutoInvoice: fd.get("balanceAutoInvoice") === "true",
-    // photos
-    images: JSON.parse(fd.get("images") || "[]"),
-  };
+    // Everything else goes into the settings JSON blob
+    const settings = {
+      description: fd.get("description") || null,
+      bookingType: fd.get("bookingType") || "single",
+      // availability
+      calendarStartDate: fd.get("calendarStartDate") || null,
+      calendarEndDate: fd.get("calendarEndDate") || null,
+      checkInTime: fd.get("checkInTime") || null,
+      checkOutTime: fd.get("checkOutTime") || null,
+      minDays: fd.get("minDays") ? parseInt(fd.get("minDays")) : 1,
+      maxDays: fd.get("maxDays") ? parseInt(fd.get("maxDays")) : null,
+      maxAdults: fd.get("maxAdults") ? parseInt(fd.get("maxAdults")) : null,
+      maxChildren: fd.get("maxChildren") ? parseInt(fd.get("maxChildren")) : null,
+      maxInfants: fd.get("maxInfants") ? parseInt(fd.get("maxInfants")) : null,
+      quantityEnabled: fd.get("quantityEnabled") === "true",
+      weeklyAvailability: JSON.parse(fd.get("weeklyAvailability") || "null"),
+      // block dates
+      blockedDates: JSON.parse(fd.get("blockedDates") || "[]"),
+      // stock / capacity
+      bedrooms: fd.get("bedrooms") ? parseInt(fd.get("bedrooms")) : null,
+      bathrooms: fd.get("bathrooms") ? parseInt(fd.get("bathrooms")) : null,
+      maxGuests: fd.get("maxGuests") ? parseInt(fd.get("maxGuests")) : null,
+      stockQuantity: fd.get("stockQuantity") ? parseInt(fd.get("stockQuantity")) : null,
+      // location
+      address: fd.get("address") || null,
+      city: fd.get("city") || null,
+      country: fd.get("country") || null,
+      // amenities
+      amenities: fd.getAll("amenities"),
+      // additional fees
+      additionalFees: JSON.parse(fd.get("additionalFees") || "[]"),
+      // discounts
+      discountedDates: JSON.parse(fd.get("discountedDates") || "[]"),
+      conditionalDiscounts: JSON.parse(fd.get("conditionalDiscounts") || "[]"),
+      // deposit
+      depositEnabled: fd.get("depositEnabled") === "true",
+      depositType: fd.get("depositType") || "percent",
+      depositAmount: fd.get("depositAmount") ? parseFloat(fd.get("depositAmount")) : null,
+      // balance collection
+      balanceAutoInvoice: fd.get("balanceAutoInvoice") === "true",
+      // photos
+      images: JSON.parse(fd.get("images") || "[]"),
+    };
 
-  if (params.id === "new") {
-    const created = await prisma.apartment.create({ data: { ...core, settings } });
+    if (params.id === "new") {
+      const created = await prisma.apartment.create({ data: { ...core, settings } });
+      await syncVariantPrice(admin, core.productId, pricePerNight);
+      await setRentficMetafields(admin, core.productId, settings);
+      return redirect(`/app/apartments/${created.id}?saved=1`);
+    }
+    const { shop, ...updateCore } = core;
+    await prisma.apartment.update({
+      where: { id: params.id },
+      data: { ...updateCore, settings },
+    });
     await syncVariantPrice(admin, core.productId, pricePerNight);
     await setRentficMetafields(admin, core.productId, settings);
-    return redirect(`/app/apartments/${created.id}?saved=1`);
+    return { success: true };
+  } catch (err) {
+    console.error("Action Error:", err);
+    return { success: false, error: err.message || String(err) };
   }
-  const { shop, ...updateCore } = core;
-  await prisma.apartment.update({
-    where: { id: params.id },
-    data: { ...updateCore, settings },
-  });
-  await syncVariantPrice(admin, core.productId, pricePerNight);
-  await setRentficMetafields(admin, core.productId, settings);
-  return { success: true };
 };
 
 // ─── UI Primitives ───────────────────────────────────────────────────────────
@@ -459,9 +464,14 @@ export default function ApartmentEditPage() {
   }, [isDirty, shopify]);
 
   useEffect(() => {
-    if (actionData?.success) {
-      shopify.toast.show("Saved");
-      setIsDirty(false);
+    if (actionData) {
+      if (actionData.success) {
+        shopify.toast.show("Saved");
+        setIsDirty(false);
+      } else if (actionData.error) {
+        shopify.toast.show("Error: " + actionData.error, { isError: true });
+        console.error("Save Error:", actionData.error);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionData]);
