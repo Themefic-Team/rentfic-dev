@@ -1,12 +1,14 @@
-import { authenticate } from "../shopify.server";
+import { authenticate, apiVersion } from "../shopify.server";
+import { useState, useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useRouteError, useLoaderData, useNavigate } from "react-router";
+import { useRouteError, useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { PlanCard } from "../components/PlanCard";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
+import { Banner } from "@shopify/polaris";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
   const now = new Date();
@@ -63,16 +65,27 @@ export const loader = async ({ request }) => {
     : "0";
 
   // Check if app embed is enabled
-  let isEmbedEnabled = true; // Default to true to prevent blocking if API fails
+  let isEmbedEnabled = false; // Default to false so it prompts activation if API check fails
+  let embedCheckError = null;
   try {
-    const themeRes = await admin.rest.get({ path: "themes.json" });
+    const themeRes = await fetch(`https://${session.shop}/admin/api/${apiVersion}/themes.json`, {
+      headers: { "X-Shopify-Access-Token": session.accessToken }
+    });
+    
+    if (!themeRes.ok) {
+      throw new Error(`Failed to fetch themes: ${themeRes.statusText}`);
+    }
     const themesData = await themeRes.json();
     const mainTheme = themesData?.themes?.find(t => t.role === "main");
     
     if (mainTheme) {
-      const assetRes = await admin.rest.get({
-        path: `themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`
+      const assetRes = await fetch(`https://${session.shop}/admin/api/${apiVersion}/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`, {
+        headers: { "X-Shopify-Access-Token": session.accessToken }
       });
+      
+      if (!assetRes.ok) {
+        throw new Error(`Failed to fetch assets: ${assetRes.statusText}`);
+      }
       const assetJson = await assetRes.json();
       const content = assetJson?.asset?.value;
       if (content) {
@@ -87,7 +100,8 @@ export const loader = async ({ request }) => {
       }
     }
   } catch (err) {
-    console.error("Theme embed check failed", err);
+    console.error("Theme embed check failed:", err.stack || err);
+    embedCheckError = "Could not check theme settings. Please restart your dev server and grant the required permissions.";
   }
 
   return {
@@ -105,6 +119,7 @@ export const loader = async ({ request }) => {
     },
     recentBookings,
     isEmbedEnabled,
+    embedCheckError,
     shopifyApiKey: process.env.SHOPIFY_API_KEY,
     shop,
   };
@@ -120,8 +135,25 @@ const STATUS_STYLE = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { stats, recentBookings, isEmbedEnabled, shopifyApiKey, shop, ...planData } = useLoaderData();
+  const { stats, recentBookings, isEmbedEnabled, embedCheckError, shopifyApiKey, shop, ...planData } = useLoaderData();
   const navigate = useNavigate();
+  const { revalidate } = useRevalidator();
+  const [isChecking, setIsChecking] = useState(false);
+
+  useEffect(() => {
+    let interval;
+    if (isChecking && !isEmbedEnabled && !embedCheckError) {
+      interval = setInterval(() => {
+        revalidate();
+      }, 3000);
+    } else if (isEmbedEnabled || embedCheckError) {
+      setIsChecking(false);
+      if (interval) clearInterval(interval);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isChecking, isEmbedEnabled, embedCheckError, revalidate]);
 
   const overviewStats = [
     { label: "Total Bookings",     value: stats.totalBookings },
@@ -134,42 +166,40 @@ export default function DashboardPage() {
 
   return (
     <s-page heading="Dashboard">
-      {!isEmbedEnabled && (
-        <div style={{
-          background: "#fff4f4",
-          border: "1px solid #fead9a",
-          padding: "20px",
-          borderRadius: "8px",
-          marginBottom: "24px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-          alignItems: "flex-start"
-        }}>
-          <div style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>
-            Enable the Rentfic App Embed
-          </div>
-          <div style={{ fontSize: "14px", color: "#6d7175" }}>
-            The booking widget is not currently enabled on your storefront. You must activate the App Embed block in your Theme Editor so customers can book your apartments.
-          </div>
-          <a
-            href={activateEmbedUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              background: "#000",
-              color: "#fff",
-              padding: "8px 16px",
-              borderRadius: "4px",
-              textDecoration: "none",
-              fontSize: "14px",
-              fontWeight: "600"
+      <div style={{ marginBottom: "24px" }}>
+        {!isEmbedEnabled ? (
+          <Banner
+            title="Enable the Rentfic App Embed"
+            tone="critical"
+            action={{
+              content: isChecking ? 'Waiting for save...' : 'Activate App Embed',
+              url: activateEmbedUrl,
+              external: true,
+              loading: isChecking,
+              onAction: () => setIsChecking(true)
             }}
           >
-            Activate App Embed →
-          </a>
-        </div>
-      )}
+            <p style={{ marginBottom: embedCheckError ? "8px" : 0 }}>
+              The booking widget is not currently enabled on your storefront. You must activate the App Embed block in your Theme Editor so customers can book your apartments.
+            </p>
+            {embedCheckError && (
+              <p style={{ color: "#d72c0d", fontWeight: "600", fontSize: "13px", marginTop: "8px" }}>
+                Error: {embedCheckError}
+              </p>
+            )}
+          </Banner>
+        ) : (
+          <Banner 
+            title="Theme App Extension is enabled and active!" 
+            tone="success"
+            action={{
+              content: 'Manage in Theme Editor',
+              url: activateEmbedUrl,
+              external: true
+            }}
+          />
+        )}
+      </div>
 
       <PlanCard data={planData} />
 
