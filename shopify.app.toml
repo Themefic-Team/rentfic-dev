@@ -2,7 +2,7 @@
 
 client_id = "c8f1c29e6603af52c05cd741a1be756f"
 name = "rentfic-dev"
-application_url = "https://example.com"
+application_url = "https://rentfic-dev.onrender.com/"
 embedded = true
 
 [build]
@@ -20,10 +20,6 @@ api_version = "2026-07"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/orders/create"
-  topics = [ "orders/create" ]
-
-  [[webhooks.subscriptions]]
   uri = "/webhooks/app_subscriptions/update"
   topics = [ "app_subscriptions/update" ]
 
@@ -32,10 +28,14 @@ api_version = "2026-07"
 scopes = "read_orders,write_inventory,write_metaobject_definitions,write_metaobjects,write_orders,write_products,read_themes"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://rentfic-dev.onrender.com/auth/callback",
+  "https://rentfic-dev.onrender.com/auth/shopify/callback",
+  "https://rentfic-dev.onrender.com/api/auth/callback"
+]
 
 [app_proxy]
-url = "https://example.com/api/proxy"
+url = "https://rentfic-dev.onrender.com/api/proxy"
 subpath = "rentfic"
 prefix = "apps"
 
