@@ -43,8 +43,14 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
+
+  const url = new URL(request.url);
+  const urlProductId = url.searchParams.get("productId");
+
+  let apartment = null;
+  let limitReached = false;
 
   if (params.id === "new") {
     const shopRecord = await prisma.shop.findUnique({ where: { shop } });
@@ -56,16 +62,55 @@ export const loader = async ({ request, params }) => {
         limitReached: true,
         currentCount: count,
         planLimit:    limits.apartments,
+        productImage: null,
+        productStoreUrl: null,
+        defaultProductPrice: null,
       };
     }
-    return { apartment: null, limitReached: false };
+  } else {
+    apartment = await prisma.apartment.findFirst({
+      where: { id: params.id, shop },
+    });
+    if (!apartment) throw new Response("Not Found", { status: 404 });
   }
 
-  const apartment = await prisma.apartment.findFirst({
-    where: { id: params.id, shop },
-  });
-  if (!apartment) throw new Response("Not Found", { status: 404 });
-  return { apartment, limitReached: false };
+  // Fetch product image, storefront URL, and price
+  let productImage = null;
+  let productStoreUrl = null;
+  let defaultProductPrice = null;
+
+  const productId = apartment?.productId || urlProductId;
+
+  if (productId) {
+    try {
+      const gid = productId.startsWith("gid://")
+        ? productId
+        : `gid://shopify/Product/${productId}`;
+      const res = await admin.graphql(
+        `#graphql
+        query GetProductData($id: ID!) {
+          product(id: $id) {
+            featuredImage { url }
+            onlineStoreUrl
+            handle
+            variants(first: 1) {
+              edges { node { price } }
+            }
+          }
+        }`,
+        { variables: { id: gid } }
+      );
+      const json = await res.json();
+      const p = json?.data?.product;
+      productImage = p?.featuredImage?.url ?? null;
+      productStoreUrl = p?.onlineStoreUrl ?? (p?.handle ? `https://${shop}/products/${p.handle}` : null);
+      defaultProductPrice = p?.variants?.edges?.[0]?.node?.price ?? null;
+    } catch (e) {
+      console.error("Failed to fetch product data:", e);
+    }
+  }
+
+  return { apartment, limitReached, currentCount: await prisma.apartment.count({ where: { shop } }), planLimit: getPlanLimits((await prisma.shop.findUnique({ where: { shop } }))?.plan).apartments, productImage, productStoreUrl, defaultProductPrice, shop };
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -355,10 +400,16 @@ function DatePickerField({ label, hint, value, onChange }) {
   );
 }
 
+export default function ApartmentEditPage() {
+  const { apartment } = useLoaderData();
+  const key = apartment?.updatedAt || "new";
+  return <ApartmentEditForm key={key} />;
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-export default function ApartmentEditPage() {
-  const { apartment, limitReached, currentCount, planLimit } = useLoaderData();
+function ApartmentEditForm() {
+  const { apartment, limitReached, currentCount, planLimit, productImage, productStoreUrl, defaultProductPrice, shop } = useLoaderData();
   const actionData = useActionData();
   const [searchParams] = useSearchParams();
   const submit = useSubmit();
@@ -379,7 +430,7 @@ export default function ApartmentEditPage() {
       // top-level columns
       name: apartment?.name ?? productTitle,
       status: apartment?.status ?? "active",
-      pricePerNight: apartment?.pricePerNight?.toString() ?? "",
+      pricePerNight: apartment?.pricePerNight?.toString() ?? defaultProductPrice?.toString() ?? "",
       // settings blob
       description: s.description ?? "",
       bookingType: s.bookingType ?? "single",
@@ -448,7 +499,7 @@ export default function ApartmentEditPage() {
   const [depositAmount, setDepositAmount] = useState(o.depositAmount);
   const [balanceAutoInvoice, setBalanceAutoInvoice] = useState(o.balanceAutoInvoice);
   const [images, setImages] = useState(o.images); // photo URLs stored in settings.images
-  const [isDirty, setIsDirty] = useState(false);
+  const [isDirty, setIsDirty] = useState(isNew);
 
   const [amenityInput, setAmenityInput] = useState("");
   const [blockDateInput, setBlockDateInput] = useState("");
@@ -457,11 +508,6 @@ export default function ApartmentEditPage() {
 
   const mark = useCallback((setter) => (e) => { setter(e.target.value); setIsDirty(true); }, []);
   const touch = useCallback((setter) => (val) => { setter(val); setIsDirty(true); }, []);
-
-  useEffect(() => {
-    if (isDirty) shopify.saveBar.show("apt-save-bar");
-    else shopify.saveBar.hide("apt-save-bar");
-  }, [isDirty, shopify]);
 
   useEffect(() => {
     if (actionData) {
@@ -651,7 +697,7 @@ export default function ApartmentEditPage() {
 
   return (
     <>
-      <SaveBar id="apt-save-bar">
+      <SaveBar open={isDirty}>
         <button variant="primary" onClick={handleSave} loading={isSaving ? "" : undefined}>Save</button>
         <button onClick={handleDiscard}>Discard</button>
       </SaveBar>
@@ -678,11 +724,39 @@ export default function ApartmentEditPage() {
         {/* ── Linked Product ── */}
         <s-section heading="Linked Product">
           <div style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px", background:"#f6f6f7", borderRadius:8, border:"1px solid #e1e3e5" }}>
-            <div style={{ width:48, height:48, borderRadius:8, background:"#e1e3e5", flexShrink:0 }} />
-            <div>
+            {productImage ? (
+              <img
+                src={productImage}
+                alt={productTitle}
+                style={{ width:48, height:48, borderRadius:8, objectFit:"cover", flexShrink:0, border:"1px solid #e1e3e5" }}
+              />
+            ) : (
+              <div style={{ width:48, height:48, borderRadius:8, background:"#e1e3e5", flexShrink:0 }} />
+            )}
+            <div style={{ flex: 1 }}>
               <div style={{ fontSize:14, fontWeight:600, color:"#202223" }}>{productTitle}</div>
               <div style={{ fontSize:12, color:"#6d7175", marginTop:2 }}>ID: {productId}</div>
             </div>
+            {productStoreUrl && (
+              <a
+                href={productStoreUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="View Live Product"
+                style={{
+                  display:"flex", alignItems:"center", gap:6,
+                  padding:"6px 12px", borderRadius:6, border:"1px solid #008060",
+                  color:"#008060", fontSize:12, fontWeight:500, textDecoration:"none",
+                  background:"#fff", flexShrink:0,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/>
+                  <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/>
+                </svg>
+                View Live
+              </a>
+            )}
           </div>
         </s-section>
 

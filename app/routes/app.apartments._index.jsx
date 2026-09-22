@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useLoaderData, useSubmit, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Icon } from "@shopify/polaris";
-import { EditIcon, CalendarIcon, ViewIcon, DeleteIcon, DuplicateIcon } from "@shopify/polaris-icons";
+import { EditIcon, CalendarIcon, ViewIcon, DeleteIcon, DuplicateIcon, ExternalIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
@@ -11,15 +11,52 @@ import { PlanCard } from "../components/PlanCard";
 const PAGE_SIZE = 10;
 
 export const loader = async ({ request }) => {
-  const { session: { shop } } = await authenticate.admin(request);
+  const { session: { shop }, admin } = await authenticate.admin(request);
   const [apartments, shopRecord] = await Promise.all([
     prisma.apartment.findMany({ where: { shop }, orderBy: { createdAt: "desc" } }),
     prisma.shop.findUnique({ where: { shop } }),
   ]);
   const limits = getPlanLimits(shopRecord?.plan);
+
+  // Batch-fetch product images + handles from Shopify Admin API
+  const productIds = [...new Set(apartments.map((a) => a.productId).filter(Boolean))];
+  const productImageMap = {};
+  if (productIds.length > 0) {
+    try {
+      // Build a query with one alias per product
+      const fragments = productIds.map((id, i) => {
+        const gid = id.startsWith("gid://") ? id : `gid://shopify/Product/${id}`;
+        return `p${i}: product(id: "${gid}") { featuredImage { url } onlineStoreUrl handle }`;
+      });
+      const res = await admin.graphql(`#graphql\n{ ${fragments.join(" ")} }`);
+      const json = await res.json();
+      productIds.forEach((id, i) => {
+        const data = json?.data?.[`p${i}`];
+        if (data) {
+          productImageMap[id] = {
+            imageUrl: data.featuredImage?.url ?? null,
+            handle: data.handle ?? null,
+            onlineStoreUrl: data.onlineStoreUrl ?? null,
+          };
+        }
+      });
+    } catch (e) {
+      console.error("Failed to fetch product images:", e);
+    }
+  }
+
+  // Attach image/handle info to each apartment
+  const enrichedApartments = apartments.map((a) => ({
+    ...a,
+    productImage: productImageMap[a.productId]?.imageUrl ?? null,
+    productHandle: productImageMap[a.productId]?.handle ?? null,
+    productStoreUrl: productImageMap[a.productId]?.onlineStoreUrl ?? null,
+  }));
+
   return {
-    apartments,
+    apartments: enrichedApartments,
     apartmentLimit: limits.apartments,
+    shop,
   };
 };
 
@@ -111,7 +148,7 @@ function timeAgo(date) {
 
 
 export default function ApartmentsIndexPage() {
-  const { apartments, apartmentLimit } = useLoaderData();
+  const { apartments, apartmentLimit, shop } = useLoaderData();
   const atLimit = apartmentLimit !== Infinity && apartments.length >= apartmentLimit;
   const submit = useSubmit();
   const navigate = useNavigate();
@@ -182,6 +219,9 @@ export default function ApartmentsIndexPage() {
       return;
     }
     const params = new URLSearchParams({ productId: p.id, productTitle: p.title });
+    // Pass the product's first variant price as the default price per night
+    const productPrice = p.variants?.[0]?.price;
+    if (productPrice) params.set("productPrice", productPrice);
     navigate(`/app/apartments/new?${params.toString()}`);
   };
 
@@ -343,7 +383,15 @@ export default function ApartmentsIndexPage() {
                 />
 
                 {/* Thumbnail */}
-                <div style={thumbStyle} />
+                {apt.productImage ? (
+                  <img
+                    src={apt.productImage}
+                    alt={apt.productTitle}
+                    style={{ ...thumbStyle, objectFit: "cover" }}
+                  />
+                ) : (
+                  <div style={thumbStyle} />
+                )}
 
                 {/* Title */}
                 {console.log(apt)}
@@ -376,7 +424,7 @@ export default function ApartmentsIndexPage() {
 
                 {/* Actions + timestamp */}
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
-                  <div style={{ display: "flex", gap: 4 }}>
+  <div style={{ display: "flex", gap: 4 }}>
                     <button
                       title="Duplicate"
                       onClick={() => handleDuplicate(apt.id, apt.name)}
@@ -398,6 +446,29 @@ export default function ApartmentsIndexPage() {
                     >
                       <Icon source={CalendarIcon} />
                     </button>
+                    {/* View Live — opens the product's storefront page */}
+                    {(apt.productStoreUrl || apt.productHandle) && (
+                      <a
+                        href={
+                          apt.productStoreUrl ||
+                          `https://${shop}/products/${apt.productHandle}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View Live Product"
+                        style={{
+                          ...iconBtnStyle,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          textDecoration: "none",
+                          color: "#008060",
+                          border: "1px solid #008060",
+                        }}
+                      >
+                        <Icon source={ExternalIcon} />
+                      </a>
+                    )}
                     <button
                       title="Delete"
                       onClick={() => handleDelete(apt.id, apt.name)}
