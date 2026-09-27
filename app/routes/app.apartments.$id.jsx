@@ -9,19 +9,80 @@ import {
 import { redirect } from "react-router";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import { Popover, DatePicker, TextField, Icon } from "@shopify/polaris";
-import { CalendarIcon, CalendarTimeIcon, CalendarCheckIcon } from "@shopify/polaris-icons";
+import { CalendarIcon, CalendarTimeIcon, CalendarCheckIcon, HomeIcon, WrenchIcon, DeliveryIcon, PackageIcon, CheckIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const AMENITY_SUGGESTIONS = [
-  "WiFi", "Air Conditioning", "Heating", "Kitchen", "Washing Machine", "Dryer",
-  "TV", "Netflix", "Free Parking", "EV Charging", "Pool", "Hot Tub", "Gym",
-  "Elevator", "Balcony", "Terrace", "Garden", "BBQ Grill", "Sea View",
-  "Mountain View", "City View", "Pet Friendly", "Smoking Allowed",
-  "Wheelchair Accessible", "24/7 Check-in", "Concierge", "Breakfast Included",
+const AMENITY_SUGGESTIONS = {
+  property: [
+    "WiFi", "Air Conditioning", "Heating", "Kitchen", "Washing Machine", "Dryer",
+    "TV", "Netflix", "Free Parking", "EV Charging", "Pool", "Hot Tub", "Gym",
+    "Elevator", "Balcony", "Terrace", "Garden", "BBQ Grill", "Sea View",
+    "Mountain View", "City View", "Pet Friendly", "Smoking Allowed",
+    "Wheelchair Accessible", "24/7 Check-in", "Concierge", "Breakfast Included",
+  ],
+  vehicle: [
+    "Bluetooth", "Backup Camera", "GPS Navigation", "Leather Seats", "Sunroof",
+    "Heated Seats", "Cruise Control", "Apple CarPlay", "Android Auto",
+    "Third-Row Seating", "All-Wheel Drive", "Keyless Entry", "USB Ports",
+    "Blind Spot Monitor", "Tow Hitch", "Convertible", "Child Seat Available"
+  ],
+  equipment: [
+    "Batteries Included", "Carrying Case", "Cables Included", "Tripod",
+    "Memory Card", "Charger", "Extra Lenses", "Waterproof", "Shockproof",
+    "Instruction Manual", "Setup Assistance"
+  ],
+  other: [
+    "Delivery Available", "Setup Included", "Instructions Provided",
+    "24/7 Support", "Insurance Available", "Maintenance Included"
+  ]
+};
+
+// ─── Listing Categories ───────────────────────────────────────────────────────
+const LISTING_TYPES = [
+  {
+    key: "property",
+    label: "Property",
+    icon: HomeIcon,
+    desc: "Apartment, villa, house, room",
+    priceUnit: "night",
+    priceLabel: "Price per Night ($)",
+    showPropertyFields: true,
+    showGuestFields: true,
+  },
+  {
+    key: "equipment",
+    label: "Equipment",
+    icon: WrenchIcon,
+    desc: "Tools, cameras, sports gear",
+    priceUnit: "day",
+    priceLabel: "Price per Day ($)",
+    showPropertyFields: false,
+    showGuestFields: false,
+  },
+  {
+    key: "vehicle",
+    label: "Vehicle",
+    icon: DeliveryIcon,
+    desc: "Car, scooter, bike, RV",
+    priceUnit: "day",
+    priceLabel: "Price per Day ($)",
+    showPropertyFields: false,
+    showGuestFields: false,
+  },
+  {
+    key: "other",
+    label: "Other",
+    icon: PackageIcon,
+    desc: "Any other rentable item",
+    priceUnit: "booking",
+    priceLabel: "Price per Booking ($)",
+    showPropertyFields: false,
+    showGuestFields: false,
+  },
 ];
 
 const DAYS = [
@@ -56,12 +117,12 @@ export const loader = async ({ request, params }) => {
     const shopRecord = await prisma.shop.findUnique({ where: { shop } });
     const limits     = getPlanLimits(shopRecord?.plan);
     const count      = await prisma.apartment.count({ where: { shop } });
-    if (count >= limits.apartments) {
+    if (count >= limits.listings) {
       return {
         apartment:   null,
         limitReached: true,
         currentCount: count,
-        planLimit:    limits.apartments,
+        planLimit:    limits.listings,
         productImage: null,
         productStoreUrl: null,
         defaultProductPrice: null,
@@ -110,7 +171,7 @@ export const loader = async ({ request, params }) => {
     }
   }
 
-  return { apartment, limitReached, currentCount: await prisma.apartment.count({ where: { shop } }), planLimit: getPlanLimits((await prisma.shop.findUnique({ where: { shop } }))?.plan).apartments, productImage, productStoreUrl, defaultProductPrice, shop };
+  return { apartment, limitReached, currentCount: await prisma.apartment.count({ where: { shop } }), planLimit: getPlanLimits((await prisma.shop.findUnique({ where: { shop } }))?.plan).listings, productImage, productStoreUrl, defaultProductPrice, shop };
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -120,9 +181,9 @@ async function syncVariantPrice(admin, productId, price) {
 
   const res = await admin.graphql(
     `#graphql
-    query GetFirstVariant($id: ID!) {
+    query GetAllVariants($id: ID!) {
       product(id: $id) {
-        variants(first: 1) {
+        variants(first: 100) {
           edges { node { id inventoryItem { id } } }
         }
       }
@@ -130,40 +191,39 @@ async function syncVariantPrice(admin, productId, price) {
     { variables: { id: gid } }
   );
   const json = await res.json();
-  const variantNode    = json?.data?.product?.variants?.edges?.[0]?.node;
-  const variantId      = variantNode?.id;
-  const inventoryItemId = variantNode?.inventoryItem?.id;
-  if (!variantId) return;
+  const edges = json?.data?.product?.variants?.edges || [];
+  if (edges.length === 0) return;
 
   // Set inventoryPolicy to CONTINUE so the product is never "Sold out"
-  const variantInput = {
-    id: variantId,
+  const variantsInput = edges.map(({ node }) => ({
+    id: node.id,
     inventoryPolicy: "CONTINUE",
-    ...(price ? { price: price.toFixed(2) } : {}),
-  };
+    ...(price !== null && price !== undefined && !isNaN(price) ? { price: price.toFixed(2) } : {}),
+  }));
+
   await admin.graphql(
     `#graphql
     mutation BulkUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
       productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants { id price inventoryPolicy }
         userErrors { field message }
       }
     }`,
-    { variables: { productId: gid, variants: [variantInput] } }
+    { variables: { productId: gid, variants: variantsInput } }
   );
 
   // Disable inventory tracking so Shopify never marks the product sold out
-  if (inventoryItemId) {
-    await admin.graphql(
-      `#graphql
-      mutation DisableInventoryTracking($id: ID!) {
-        inventoryItemUpdate(id: $id, input: { tracked: false }) {
-          inventoryItem { id tracked }
-          userErrors { field message }
-        }
-      }`,
-      { variables: { id: inventoryItemId } }
-    );
+  for (const { node } of edges) {
+    if (node.inventoryItem?.id) {
+      await admin.graphql(
+        `#graphql
+        mutation DisableInventoryTracking($id: ID!) {
+          inventoryItemUpdate(id: $id, input: { tracked: false }) {
+            userErrors { field message }
+          }
+        }`,
+        { variables: { id: node.inventoryItem.id } }
+      );
+    }
   }
 }
 
@@ -205,7 +265,17 @@ export const action = async ({ request, params }) => {
     };
 
     // Everything else goes into the settings JSON blob
+    if (fd.get("listingType") === 'property') {
+      const maxA = fd.get("maxAdults") ? parseInt(fd.get("maxAdults")) : 0;
+      const maxC = fd.get("maxChildren") ? parseInt(fd.get("maxChildren")) : 0;
+      const maxG = fd.get("maxGuests") ? parseInt(fd.get("maxGuests")) : 0;
+      if (maxG > 0 && (maxA + maxC) > maxG) {
+        return { success: false, error: `Max Adults (${maxA}) + Max Children (${maxC}) cannot exceed Max Guests (${maxG}).` };
+      }
+    }
+
     const settings = {
+      listingType: fd.get("listingType") || "property",
       description: fd.get("description") || null,
       bookingType: fd.get("bookingType") || "single",
       // availability
@@ -231,6 +301,14 @@ export const action = async ({ request, params }) => {
       address: fd.get("address") || null,
       city: fd.get("city") || null,
       country: fd.get("country") || null,
+      // vehicle
+      transmission: fd.get("transmission") || null,
+      fuelPolicy: fd.get("fuelPolicy") || null,
+      mileageLimit: fd.get("mileageLimit") ? parseInt(fd.get("mileageLimit")) : null,
+      licenseRequired: fd.get("licenseRequired") === "true",
+      // equipment
+      condition: fd.get("condition") || null,
+      inventoryUnits: fd.get("inventoryUnits") ? parseInt(fd.get("inventoryUnits")) : null,
       // amenities
       amenities: fd.getAll("amenities"),
       // additional fees
@@ -252,7 +330,7 @@ export const action = async ({ request, params }) => {
       const created = await prisma.apartment.create({ data: { ...core, settings } });
       await syncVariantPrice(admin, core.productId, pricePerNight);
       await setRentficMetafields(admin, core.productId, settings);
-      return redirect(`/app/apartments/${created.id}?saved=1`);
+      return redirect(`/app/apartments?saved=1`);
     }
     const { shop, ...updateCore } = core;
     await prisma.apartment.update({
@@ -432,6 +510,7 @@ function ApartmentEditForm() {
       status: apartment?.status ?? "active",
       pricePerNight: apartment?.pricePerNight?.toString() ?? defaultProductPrice?.toString() ?? "",
       // settings blob
+      listingType: s.listingType ?? "property",
       description: s.description ?? "",
       bookingType: s.bookingType ?? "single",
       calendarStartDate: s.calendarStartDate ?? "",
@@ -467,6 +546,7 @@ function ApartmentEditForm() {
 
   const o = orig.current;
   const [name, setName] = useState(o.name);
+  const [listingType, setListingType] = useState(o.listingType);
   const [status, setStatus] = useState(o.status);
   const [pricePerNight, setPricePerNight] = useState(o.pricePerNight);
   const [description, setDescription] = useState(o.description);
@@ -490,6 +570,16 @@ function ApartmentEditForm() {
   const [address, setAddress] = useState(o.address);
   const [city, setCity] = useState(o.city);
   const [country, setCountry] = useState(o.country);
+
+  // equipment
+  const [condition, setCondition] = useState(o.condition || "good");
+  const [inventoryUnits, setInventoryUnits] = useState(o.inventoryUnits || "");
+
+  // vehicle
+  const [transmission, setTransmission] = useState(o.transmission || "automatic");
+  const [fuelPolicy, setFuelPolicy] = useState(o.fuelPolicy || "full-to-full");
+  const [mileageLimit, setMileageLimit] = useState(o.mileageLimit || "");
+  const [licenseRequired, setLicenseRequired] = useState(o.licenseRequired || false);
   const [amenities, setAmenities] = useState(o.amenities);
   const [additionalFees, setAdditionalFees] = useState(o.additionalFees);
   const [discountedDates, setDiscountedDates] = useState(o.discountedDates);
@@ -523,7 +613,7 @@ function ApartmentEditForm() {
   }, [actionData]);
 
   useEffect(() => {
-    if (searchParams.get("saved")) shopify.toast.show("Apartment created");
+    if (searchParams.get("saved")) shopify.toast.show("Rental created");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -548,7 +638,7 @@ function ApartmentEditForm() {
 
   const handleSave = () => {
     if (!name.trim()) {
-      shopify.toast.show("Apartment name is required", { isError: true });
+      shopify.toast.show("Listing name is required", { isError: true });
       return;
     }
     const fd = new FormData();
@@ -559,6 +649,7 @@ function ApartmentEditForm() {
     fd.append("status", status);
     fd.append("pricePerNight", pricePerNight);
     // settings fields
+    fd.append("listingType", listingType);
     fd.append("description", description);
     fd.append("bookingType", bookingType);
     fd.append("maxAdults", maxAdults);
@@ -580,6 +671,14 @@ function ApartmentEditForm() {
     fd.append("address", address);
     fd.append("city", city);
     fd.append("country", country);
+    
+    // new fields
+    fd.append("transmission", transmission);
+    fd.append("fuelPolicy", fuelPolicy);
+    fd.append("mileageLimit", mileageLimit);
+    fd.append("licenseRequired", String(licenseRequired));
+    fd.append("condition", condition);
+    fd.append("inventoryUnits", inventoryUnits);
     amenities.forEach((a) => fd.append("amenities", a));
     fd.append("additionalFees", JSON.stringify(additionalFees));
     fd.append("discountedDates", JSON.stringify(discountedDates));
@@ -646,15 +745,15 @@ function ApartmentEditForm() {
 
   if (limitReached) {
     return (
-      <s-page heading="Create Apartment">
+      <s-page heading="Add Rental">
         <s-section>
           <div style={{ padding: "24px 20px", background: "#fff4f4", border: "1px solid #fead9a", borderRadius: 8 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#202223", marginBottom: 8 }}>
-              Apartment limit reached
+              Rental listing limit reached
             </div>
             <div style={{ fontSize: 14, color: "#6d7175", lineHeight: 1.6, marginBottom: 16 }}>
-              You are using {currentCount} of {planLimit} apartment{planLimit !== 1 ? "s" : ""} allowed on the Free plan.
-              Upgrade to Pro or Business to add unlimited apartments.
+              You are using {currentCount} of {planLimit} rental{planLimit !== 1 ? "s" : ""} allowed on the Free plan.
+              Upgrade to Pro or Business to add unlimited rentals.
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <a
@@ -686,7 +785,7 @@ function ApartmentEditForm() {
                   textDecoration: "none",
                 }}
               >
-                Back to Apartments
+                Back to Rentals
               </a>
             </div>
           </div>
@@ -702,7 +801,7 @@ function ApartmentEditForm() {
         <button onClick={handleDiscard}>Discard</button>
       </SaveBar>
 
-      <s-page heading={isNew ? "Create Apartment" : `Edit: ${apartment.name}`}>
+      <s-page heading={isNew ? "Add Rental" : `Edit: ${apartment.name}`}>
 
         {!isNew && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
@@ -723,6 +822,9 @@ function ApartmentEditForm() {
 
         {/* ── Linked Product ── */}
         <s-section heading="Linked Product">
+          <p style={{ margin: "0 0 12px", fontSize: 13, color: "#6d7175" }}>
+            This Shopify product is used to handle customer checkout and payments. Its details are hidden on the booking widget.
+          </p>
           <div style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px", background:"#f6f6f7", borderRadius:8, border:"1px solid #e1e3e5" }}>
             {productImage ? (
               <img
@@ -762,6 +864,54 @@ function ApartmentEditForm() {
 
         {/* ══════════════ BOOKING SETTINGS ══════════════ */}
         <s-section heading="Booking Settings">
+
+          {/* ── Listing Category ── */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: "#202223", marginBottom: 4 }}>Rental Category</div>
+            <div style={{ fontSize: 12, color: "#6d7175", marginBottom: 12 }}>Choose the type of rental this controls which fields are shown below.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+              {LISTING_TYPES.map((lt) => {
+                const isActive = listingType === lt.key;
+                return (
+                  <button
+                    key={lt.key}
+                    type="button"
+                    onClick={() => { setListingType(lt.key); setIsDirty(true); }}
+                    style={{
+                      padding: "14px 12px",
+                      textAlign: "center",
+                      cursor: "pointer",
+                      border: `2px solid ${isActive ? "#008060" : "#e1e3e5"}`,
+                      borderRadius: 12,
+                      background: isActive ? "#e6f7f1" : "#fff",
+                      transition: "all 0.15s",
+                      boxShadow: isActive ? "0 0 0 3px #00806022" : "none",
+                      position: "relative",
+                    }}
+                  >
+                    {isActive && (
+                      <span style={{
+                        position: "absolute", top: 8, right: 8,
+                        width: 18, height: 18, borderRadius: "50%",
+                        background: "#008060", display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <span style={{ width: 14, height: 14, display: "block", color: "#fff" }}>
+                          <Icon source={CheckIcon} />
+                        </span>
+                      </span>
+                    )}
+                    <div style={{ marginBottom: 6, display: "flex", justifyContent: "center", color: isActive ? "#008060" : "#5c5f62" }}>
+                      <span style={{ width: 24, height: 24, display: "block" }}>
+                        <Icon source={lt.icon} />
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#202223", marginBottom: 2 }}>{lt.label}</div>
+                    <div style={{ fontSize: 11, color: "#6d7175", lineHeight: 1.4 }}>{lt.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div style={{ marginBottom:20 }}>
             <div style={{ fontSize:14, fontWeight:500, color:"#202223", marginBottom:10 }}>Booking Type</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12 }}>
@@ -815,8 +965,8 @@ function ApartmentEditForm() {
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(250px, 1fr))", gap:16 }}>
-            <Field label="Apartment Name *">
-              <Inp type="text" value={name} onChange={mark(setName)} placeholder="e.g. Ocean View Suite" />
+            <Field label="Listing Name *" hint="The name shown to customers on the booking calendar.">
+              <Inp type="text" value={name} onChange={mark(setName)} placeholder={listingType === 'property' ? 'e.g. Ocean View Suite' : listingType === 'equipment' ? 'e.g. Canon R5 Camera' : listingType === 'vehicle' ? 'e.g. Red Tesla Model 3' : 'e.g. Beach Chairs'} />
             </Field>
             <Field label="Status">
               <Sel value={status} onChange={mark(setStatus)}>
@@ -826,18 +976,22 @@ function ApartmentEditForm() {
               </Sel>
             </Field>
             <Field label="Description" style={{ gridColumn:"1 / -1" }}>
-              <textarea value={description} onChange={mark(setDescription)} placeholder="Describe the apartment..." rows={3}
-                style={{ ...inputStyle, resize:"vertical" }} />
+              <textarea value={description} onChange={mark(setDescription)}
+                placeholder={listingType === 'property' ? 'Describe the apartment...' : listingType === 'equipment' ? 'Describe the equipment, condition, specs...' : listingType === 'vehicle' ? 'Describe the vehicle, year, mileage...' : 'Describe this rental...'}
+                rows={3} style={{ ...inputStyle, resize:"vertical" }} />
             </Field>
-            <Field label="Maximum Adults ⓘ">
-              <Inp type="number" min={0} value={maxAdults} onChange={mark(setMaxAdults)} placeholder="e.g. 5" />
-            </Field>
-            <Field label="Maximum Children ⓘ">
-              <Inp type="number" min={0} value={maxChildren} onChange={mark(setMaxChildren)} placeholder="e.g. 5" />
-            </Field>
-            <Field label="Maximum Infants ⓘ">
-              <Inp type="number" min={0} value={maxInfants} onChange={mark(setMaxInfants)} placeholder="e.g. 5" />
-            </Field>
+            {/* Guest fields - only shown for property & experience */}
+            {(LISTING_TYPES.find(l => l.key === listingType)?.showGuestFields) && (<>
+              <Field label="Maximum Adults ⓘ">
+                <Inp type="number" min={0} value={maxAdults} onChange={mark(setMaxAdults)} placeholder="e.g. 5" />
+              </Field>
+              <Field label="Maximum Children ⓘ">
+                <Inp type="number" min={0} value={maxChildren} onChange={mark(setMaxChildren)} placeholder="e.g. 5" />
+              </Field>
+              <Field label="Maximum Infants ⓘ">
+                <Inp type="number" min={0} value={maxInfants} onChange={mark(setMaxInfants)} placeholder="e.g. 5" />
+              </Field>
+            </>)}
           </div>
         </s-section>
 
@@ -886,10 +1040,11 @@ function ApartmentEditForm() {
               value={calendarEndDate}
               onChange={(val) => { setCalendarEndDate(val); setIsDirty(true); }}
             />
-            <Field label="Check-in Time">
+            {/* Time fields (dynamically labeled) */}
+            <Field label={LISTING_TYPES.find(l => l.key === listingType)?.showPropertyFields ? "Check-in Time" : "Pickup Time"}>
               <Inp type="time" value={checkInTime} onChange={mark(setCheckInTime)} />
             </Field>
-            <Field label="Check-out Time">
+            <Field label={LISTING_TYPES.find(l => l.key === listingType)?.showPropertyFields ? "Check-out Time" : "Return Time"}>
               <Inp type="time" value={checkOutTime} onChange={mark(setCheckOutTime)} />
             </Field>
             {(bookingType === "range" || bookingType === "multiple") && (<>
@@ -908,12 +1063,15 @@ function ApartmentEditForm() {
             </>)}
           </div>
 
-          <ToggleRow
-            label="Quantity Selector"
-            hint="Let customers choose quantity when booking"
-            enabled={quantityEnabled}
-            onChange={touch(setQuantityEnabled)}
-          />
+          {/* Quantity Selector — hide for property (it has its own toggle in Property Details) */}
+          {listingType !== 'property' && (
+            <ToggleRow
+              label="Quantity Selector"
+              hint="Let customers choose quantity when booking"
+              enabled={quantityEnabled}
+              onChange={touch(setQuantityEnabled)}
+            />
+          )}
 
           <div style={{ marginTop:20 }}>
             <div style={{ fontSize:14, fontWeight:500, color:"#202223", marginBottom:12 }}>Weekly Availability</div>
@@ -931,6 +1089,13 @@ function ApartmentEditForm() {
                     <span style={{ fontSize:12, fontWeight:700, width:28, color: day.enabled ? "#202223" : "#adb5bd" }}>
                       {day.enabled ? "ON" : "OFF"}
                     </span>
+                    {day.enabled && (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: "auto" }}>
+                        <Inp type="time" value={day.open} onChange={(e) => updateDay(key, "open", e.target.value)} style={{ padding: "4px 8px", width: 110 }} />
+                        <span>-</span>
+                        <Inp type="time" value={day.close} onChange={(e) => updateDay(key, "close", e.target.value)} style={{ padding: "4px 8px", width: 110 }} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -938,8 +1103,9 @@ function ApartmentEditForm() {
           </div>
         </s-section>
 
-        {/* ══════════════ STOCK MANAGEMENT ══════════════ */}
-        <s-section heading="Stock Management">
+        {/* ══════════════ PROPERTY DETAILS (only for property type) ══════════════ */}
+        {LISTING_TYPES.find(l => l.key === listingType)?.showPropertyFields && (
+        <s-section heading="Property Details">
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16, marginBottom:16 }}>
             <Field label="Bedrooms">
               <Inp type="number" min={0} value={bedrooms} onChange={mark(setBedrooms)} placeholder="0" />
@@ -978,11 +1144,62 @@ function ApartmentEditForm() {
             </Field>
           </div>
         </s-section>
+        )}
 
-        {/* ══════════════ PRICE ══════════════ */}
-        <s-section heading="Price">
+        {/* ══════════════ STOCK MANAGEMENT ══════════════ */}
+        <s-section heading="Stock & Capacity">
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16, marginBottom:16 }}>
+            {!LISTING_TYPES.find(l => l.key === listingType)?.showPropertyFields && (
+              <Field label="Location / Address" hint="Where will the customer pick this up?" style={{ gridColumn:"1/-1" }}>
+                <Inp type="text" value={address} onChange={mark(setAddress)} placeholder="Location or delivery address" />
+              </Field>
+            )}
+            {listingType === 'vehicle' && (
+              <>
+                <Field label="Transmission">
+                  <Sel value={transmission} onChange={mark(setTransmission)}>
+                    <option value="automatic">Automatic</option>
+                    <option value="manual">Manual</option>
+                  </Sel>
+                </Field>
+                <Field label="Fuel Policy">
+                  <Sel value={fuelPolicy} onChange={mark(setFuelPolicy)}>
+                    <option value="full-to-full">Full-to-Full</option>
+                    <option value="pre-paid">Pre-paid</option>
+                    <option value="included">Included</option>
+                  </Sel>
+                </Field>
+                <Field label="Mileage Limit (km/miles)" hint="Leave blank for unlimited">
+                  <Inp type="number" min="0" value={mileageLimit} onChange={mark(setMileageLimit)} placeholder="Unlimited" />
+                </Field>
+                <Field label="Driver's License Required">
+                  <div style={{ marginTop: 6 }}>
+                    <Toggle enabled={licenseRequired} onChange={touch(setLicenseRequired)} />
+                  </div>
+                </Field>
+                <Field label="Passenger Capacity (Seats)">
+                  <Inp type="number" min={1} value={maxGuests} onChange={mark(setMaxGuests)} placeholder="e.g. 5" />
+                </Field>
+              </>
+            )}
+            {listingType === 'equipment' && (
+              <>
+                <Field label="Condition">
+                  <Sel value={condition} onChange={mark(setCondition)}>
+                    <option value="new">New</option>
+                    <option value="good">Good</option>
+                    <option value="fair">Fair</option>
+                    <option value="parts">For Parts</option>
+                  </Sel>
+                </Field>
+                <Field label="Total Units in Inventory" hint="Total physical stock available">
+                  <Inp type="number" min="1" value={inventoryUnits} onChange={mark(setInventoryUnits)} />
+                </Field>
+              </>
+            )}
+          </div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", gap:16, marginBottom:24 }}>
-            <Field label="Price per Night ($)">
+            <Field label={LISTING_TYPES.find(l => l.key === listingType)?.priceLabel ?? "Price ($)"}>
               <div style={{ position:"relative" }}>
                 <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"#6d7175", fontSize:14 }}>$</span>
                 <Inp type="number" min={0} step="0.01" value={pricePerNight} onChange={mark(setPricePerNight)} placeholder="0.00" style={{ paddingLeft:26 }} />
@@ -1006,7 +1223,7 @@ function ApartmentEditForm() {
                       {fee.type === "percent" ? `${fee.amount}%` : `$${fee.amount}`}
                     </span>
                     <span style={{ fontSize:12, color:"#6d7175", background:"#f1f2f3", padding:"2px 8px", borderRadius:10 }}>
-                      {fee.applyPer === "booking" ? "per booking" : "per night"}
+                      {fee.applyPer === "booking" ? "per booking" : "per unit"}
                     </span>
                     <button type="button"
                       onClick={() => { setAdditionalFees((p) => p.filter((f) => f.id !== fee.id)); setIsDirty(true); }}
@@ -1035,7 +1252,7 @@ function ApartmentEditForm() {
                 <Field label="Apply Per">
                   <select id="fee-per-input" style={inputStyle}>
                     <option value="booking">Per Booking</option>
-                    <option value="night">Per Night</option>
+                    <option value="night">Per Unit / Day</option>
                   </select>
                 </Field>
               </div>
@@ -1189,8 +1406,8 @@ function ApartmentEditForm() {
                   <div style={{ display:"flex", alignItems:"flex-end", gap:16 }}>
                     <Field label="Apply Mode" style={{ flex:1 }}>
                       <Sel value={rule.applyMode} onChange={(e) => updateRule(rule.id, "applyMode", e.target.value)}>
-                        <option value="once">Single time — applied once to total</option>
-                        <option value="each">Per unit — multiplied per night / item</option>
+                        <option value="once">Single time - applied once to total</option>
+                        <option value="each">Per unit - multiplied per night / item</option>
                       </Sel>
                     </Field>
                     <button type="button"
@@ -1248,8 +1465,8 @@ function ApartmentEditForm() {
                     <strong style={{ color:"#202223" }}>How it works:</strong><br />
                     1. Customer pays deposit at checkout<br />
                     2. App detects the order and creates a draft order in Shopify for the remaining balance<br />
-                    3. A <strong style={{ color:"#202223" }}>Send Invoice</strong> button appears on the booking — click it to email the payment link to the customer<br />
-                    4. Customer pays the balance via the link — booking is fully settled
+                    3. A <strong style={{ color:"#202223" }}>Send Invoice</strong> button appears on the booking - click it to email the payment link to the customer<br />
+                    4. Customer pays the balance via the link - booking is fully settled
                   </div>
                 )}
               </div>
@@ -1303,9 +1520,9 @@ function ApartmentEditForm() {
           </div>
 
           {/* Suggestions */}
-          <div style={{ fontSize:12, color:"#6d7175", marginBottom:8 }}>Common suggestions — click to add:</div>
+          <div style={{ fontSize:12, color:"#6d7175", marginBottom:8 }}>Common suggestions - click to add:</div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-            {AMENITY_SUGGESTIONS.filter((s) => !amenities.includes(s)).map((item) => (
+            {(AMENITY_SUGGESTIONS[listingType] || AMENITY_SUGGESTIONS.property).filter((s) => !amenities.includes(s)).map((item) => (
               <button key={item} type="button"
                 onClick={() => { setAmenities((p) => [...p, item]); setIsDirty(true); }}
                 style={{
@@ -1321,7 +1538,7 @@ function ApartmentEditForm() {
         {/* ── Photos ── */}
         <s-section heading="Photos">
           <p style={{ fontSize: 13, color: "#6d7175", marginBottom: 14, marginTop: 0 }}>
-            Upload photos of this apartment. They will be displayed in the storefront booking widget.
+            Upload photos of this rental. They will be displayed in the storefront booking widget.
           </p>
 
           {/* Upload input */}
@@ -1367,7 +1584,7 @@ function ApartmentEditForm() {
               }}
             />
             <span style={{ fontSize: 12, color: "#6d7175", marginLeft: 12 }}>
-              PNG, JPG, WEBP — up to 20 MB each
+              PNG, JPG, WEBP - up to 20 MB each
             </span>
           </div>
 
@@ -1459,7 +1676,7 @@ function ApartmentEditForm() {
               border: "2px dashed #e1e3e5", borderRadius: 8, padding: "32px 0",
               textAlign: "center", color: "#6d7175", fontSize: 13,
             }}>
-              No photos yet — click "Choose Photos" to add some.
+              No photos yet - click "Choose Photos" to add some.
             </div>
           )}
         </s-section>

@@ -23,7 +23,7 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Plan gate — analytics only for Business
+  // Plan gate - analytics only for Business
   const shopRecord = await prisma.shop.findUnique({ where: { shop } });
   const plan  = shopRecord?.plan ?? "free";
   const limits = getPlanLimits(plan);
@@ -33,7 +33,7 @@ export const loader = async ({ request }) => {
 
   const now = new Date();
 
-  // ── 1. Revenue by month — last 12 months ────────────────────────────────
+  // ── 1. Revenue by month - last 12 months ────────────────────────────────
   const months = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -91,7 +91,7 @@ export const loader = async ({ request }) => {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5);
 
-  // ── 4. Occupancy rate — last 30 days ────────────────────────────────────
+  // ── 4. Occupancy rate - last 30 days ────────────────────────────────────
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const thirtyStr = toStr(thirtyDaysAgo);
@@ -470,7 +470,7 @@ export default function AnalyticsPage() {
 
       {/* ─────────── REVENUE ─────────── */}
       {activeTab === "revenue" && (
-        <s-section heading="Monthly Revenue — Last 12 Months">
+        <s-section heading="Monthly Revenue - Last 12 Months">
           {revenueByMonth.every((m) => m.revenue === 0) ? (
             <div style={{ textAlign: "center", color: "#8c9196", padding: "40px 0", fontSize: 14 }}>
               No revenue data yet. Revenue appears when bookings are confirmed.
@@ -492,7 +492,7 @@ export default function AnalyticsPage() {
                       <tr key={i} style={{ borderBottom: "1px solid #f1f2f3" }}>
                         <td style={tdStyle}>{m.label}</td>
                         <td style={{ ...tdStyle, fontWeight: 600, color: m.revenue > 0 ? "#008060" : "#8c9196" }}>
-                          {m.revenue > 0 ? fmtCurrency(m.revenue) : "—"}
+                          {m.revenue > 0 ? fmtCurrency(m.revenue) : "-"}
                         </td>
                         <td style={tdStyle}>{m.bookings}</td>
                       </tr>
@@ -508,7 +508,7 @@ export default function AnalyticsPage() {
       {/* ─────────── BOOKINGS ─────────── */}
       {activeTab === "bookings" && (
         <>
-          <s-section heading="Monthly Bookings — Last 12 Months">
+          <s-section heading="Monthly Bookings - Last 12 Months">
             <BarChart
               data={revenueByMonth.map((m) => ({ ...m, revenue: m.bookings }))}
               height={180}
@@ -526,7 +526,7 @@ export default function AnalyticsPage() {
                     <span style={{ fontSize: 14, color: "#202223", width: 90 }}>{s.label}</span>
                     <strong style={{ fontSize: 18, color: "#202223", width: 50 }}>{s.value}</strong>
                     <span style={{ fontSize: 12, color: "#8c9196" }}>
-                      {totalAllStatus > 0 ? `${Math.round((s.value / totalAllStatus) * 100)}%` : "—"}
+                      {totalAllStatus > 0 ? `${Math.round((s.value / totalAllStatus) * 100)}%` : "-"}
                     </span>
                   </div>
                 ))}
@@ -538,7 +538,7 @@ export default function AnalyticsPage() {
 
       {/* ─────────── OCCUPANCY ─────────── */}
       {activeTab === "occupancy" && (
-        <s-section heading="Occupancy Rate — Last 30 Days">
+        <s-section heading="Occupancy Rate - Last 30 Days">
           <s-paragraph>Percentage of the last 30 days that each apartment had at least one confirmed or completed booking.</s-paragraph>
           <div style={{ marginTop: 16 }}>
             {occupancy.length === 0 ? (
@@ -606,7 +606,7 @@ export default function AnalyticsPage() {
                       <td style={tdStyle}>{apt.nights}</td>
                       <td style={{ ...tdStyle, fontWeight: 700, color: "#008060" }}>{fmtCurrency(apt.revenue)}</td>
                       <td style={tdStyle}>
-                        {apt.bookings > 0 ? fmtCurrency(apt.revenue / apt.bookings) : "—"}
+                        {apt.bookings > 0 ? fmtCurrency(apt.revenue / apt.bookings) : "-"}
                       </td>
                     </tr>
                   ))}

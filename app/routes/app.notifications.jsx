@@ -647,7 +647,7 @@ export default function NotificationsPage() {
               }}
             >
               Uses app-level <code>SMTP_HOST</code> environment variables.
-              If none are configured, emails are sent to an Ethereal test inbox —
+              If none are configured, emails are sent to an Ethereal test inbox -
               check the server console for the preview URL.
             </div>
           )}

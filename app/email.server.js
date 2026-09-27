@@ -40,7 +40,7 @@ async function getEtherealTransport() {
       from: `"Rentfic" <${acct.user}>`,
     };
     console.log(
-      "\n[Rentfic] No SMTP configured — using Ethereal test inbox (dev only).",
+      "\n[Rentfic] No SMTP configured - using Ethereal test inbox (dev only).",
       `\n  View messages → https://ethereal.email/messages`,
       `\n  Login: ${acct.user} / ${acct.pass}\n`
     );
@@ -71,7 +71,7 @@ async function resolveTransport(config) {
     };
   }
 
-  // No SMTP anywhere — fall back to Ethereal test inbox
+  // No SMTP anywhere - fall back to Ethereal test inbox
   return getEtherealTransport();
 }
 

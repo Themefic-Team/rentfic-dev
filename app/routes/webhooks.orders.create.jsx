@@ -40,7 +40,7 @@ export const action = async ({ request }) => {
           },
         });
       } catch {
-        // Booking may have been deleted or the id is invalid — skip silently
+        // Booking may have been deleted or the id is invalid - skip silently
         return;
       }
 

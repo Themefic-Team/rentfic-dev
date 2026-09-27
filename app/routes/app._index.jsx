@@ -56,7 +56,7 @@ export const loader = async ({ request }) => {
 
   const appPlan = shopRecord?.plan ?? "free";
   const limits  = getPlanLimits(appPlan);
-  const apartmentLimit = limits.apartments === Infinity ? null : limits.apartments;
+  const listingLimit = limits.listings === Infinity ? null : limits.listings;
 
   const revenueThisMonth = revenueAgg._sum.totalPrice ?? 0;
 
@@ -106,8 +106,8 @@ export const loader = async ({ request }) => {
 
   return {
     appPlan,
-    apartmentCount,
-    apartmentLimit,
+    listingCount: apartmentCount,
+    listingLimit,
     renewalDate: null,
     stats: {
       totalBookings,
@@ -156,10 +156,10 @@ export default function DashboardPage() {
   }, [isChecking, isEmbedEnabled, embedCheckError, revalidate]);
 
   const overviewStats = [
-    { label: "Total Bookings",     value: stats.totalBookings },
-    { label: "Active Apartments",  value: stats.activeApartments },
-    { label: "Revenue This Month", value: `$${Number(stats.revenueThisMonth).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` },
-    { label: "Avg. Nights / Stay", value: `${stats.avgNights} nights` },
+    { label: "Total Bookings",      value: stats.totalBookings },
+    { label: "Active Rentals",       value: stats.activeApartments },
+    { label: "Revenue This Month",   value: `$${Number(stats.revenueThisMonth).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` },
+    { label: "Avg. Duration / Stay", value: `${stats.avgNights} nights` },
   ];
 
   const activateEmbedUrl = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${shopifyApiKey}/app_embed`;
@@ -180,7 +180,7 @@ export default function DashboardPage() {
             }}
           >
             <p style={{ marginBottom: embedCheckError ? "8px" : 0 }}>
-              The booking widget is not currently enabled on your storefront. You must activate the App Embed block in your Theme Editor so customers can book your apartments.
+              The booking widget is not currently enabled on your storefront. You must activate the App Embed block in your Theme Editor so customers can book your rentals.
             </p>
             {embedCheckError && (
               <p style={{ color: "#d72c0d", fontWeight: "600", fontSize: "13px", marginTop: "8px" }}>
@@ -229,7 +229,7 @@ export default function DashboardPage() {
       {/* Recent bookings */}
       <s-section heading="Recent Bookings">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <s-paragraph>Latest bookings across all apartments.</s-paragraph>
+          <s-paragraph>Latest bookings across all rentals.</s-paragraph>
           <a
             href="/app/booking"
             style={{ fontSize: 13, fontWeight: 600, color: "#005bd3", textDecoration: "none" }}
@@ -246,7 +246,7 @@ export default function DashboardPage() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
-                  {["Order", "Guest", "Apartment", "Check-in", "Check-out", "Total", "Status"].map((h) => (
+                  {["Order", "Guest", "Rental", "Start Date", "End Date", "Total", "Status"].map((h) => (
                     <th key={h} style={thStyle}>{h}</th>
                   ))}
                 </tr>
@@ -265,12 +265,12 @@ export default function DashboardPage() {
                     onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
                   >
                     <td style={tdStyle}>{b.orderNumber ? `#${b.orderNumber}` : <span style={{ color: "#8c9196", fontSize: 12 }}>{b.id.slice(-6).toUpperCase()}</span>}</td>
-                    <td style={tdStyle}>{b.customerName ?? b.customerEmail ?? <span style={{ color: "#8c9196" }}>—</span>}</td>
+                    <td style={tdStyle}>{b.customerName ?? b.customerEmail ?? <span style={{ color: "#8c9196" }}>-</span>}</td>
                     <td style={{ ...tdStyle, color: "#6d7175" }}>{b.productTitle}</td>
                     <td style={tdStyle}>{b.startDate}</td>
-                    <td style={tdStyle}>{b.endDate ?? "—"}</td>
+                    <td style={tdStyle}>{b.endDate ?? "-"}</td>
                     <td style={{ ...tdStyle, fontWeight: 600 }}>
-                      {b.totalPrice != null ? `$${Number(b.totalPrice).toFixed(2)}` : "—"}
+                      {b.totalPrice != null ? `$${Number(b.totalPrice).toFixed(2)}` : "-"}
                     </td>
                     <td style={tdStyle}>
                       <span style={{

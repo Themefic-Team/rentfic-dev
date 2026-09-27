@@ -30,7 +30,7 @@ export const loader = async ({ request, params }) => {
     lines.push(`UID:${b.id}@rentfic`);
     lines.push(`DTSTART;VALUE=DATE:${b.startDate.replace(/-/g, "")}`);
     lines.push(`DTEND;VALUE=DATE:${(b.endDate ?? b.startDate).replace(/-/g, "")}`);
-    lines.push(`SUMMARY:${b.customerName ?? "Booking"} — ${b.productTitle}`);
+    lines.push(`SUMMARY:${b.customerName ?? "Booking"} - ${b.productTitle}`);
     lines.push(`STATUS:CONFIRMED`);
     lines.push("END:VEVENT");
   });

@@ -32,7 +32,7 @@ async function createDraftOrder(admin, booking, balanceAmount) {
     variables: {
       input: {
         lineItems: [{
-          title: `Balance Due — ${booking.productTitle} (${dateLabel})`,
+          title: `Balance Due - ${booking.productTitle} (${dateLabel})`,
           quantity: 1,
           originalUnitPrice: balanceAmount.toFixed(2),
         }],
@@ -176,6 +176,7 @@ export const loader = async ({ request }) => {
   const bookings = await prisma.booking.findMany({
     where: { shop: session.shop },
     orderBy: { createdAt: "desc" },
+    include: { apartment: { select: { settings: true } } }
   });
 
   const formatted = bookings.map((b) => {
@@ -183,15 +184,16 @@ export const loader = async ({ request }) => {
       ? b.totalPrice - b.depositAmount : null;
     return {
       id:            b.id,
-      guest:         b.customerName  || "—",
+      guest:         b.customerName  || "-",
       email:         b.customerEmail || "",
-      apartment:     b.productTitle  || "—",
+      apartment:     b.productTitle  || "-",
+      listingType:   b.apartment?.settings?.listingType || 'property',
       checkIn:       b.startDate,
       checkOut:      b.endDate,
       checkInFmt:    fmtDate(b.startDate),
       checkOutFmt:   fmtDate(b.endDate),
       nights:        b.nights ?? 1,
-      total:         b.totalPrice != null ? fmtCurrency(b.totalPrice) : "—",
+      total:         b.totalPrice != null ? fmtCurrency(b.totalPrice) : "-",
       totalRaw:      b.totalPrice,
       depositAmount: b.depositAmount != null ? fmtCurrency(b.depositAmount) : null,
       balanceDue:    balanceNum != null && balanceNum > 0 ? fmtCurrency(balanceNum) : null,
@@ -347,7 +349,7 @@ export const action = async ({ request }) => {
 };
 
 function fmtDate(str) {
-  if (!str) return "—";
+  if (!str) return "-";
   const [y, m, d] = str.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -534,7 +536,7 @@ export default function BookingPage() {
           }}>
             {syncResult.linked > 0
               ? `✓ Synced ${syncResult.linked} booking${syncResult.linked !== 1 ? "s" : ""} with Shopify orders. ${syncResult.stillUnlinked} booking${syncResult.stillUnlinked !== 1 ? "s" : ""} still unlinked (no matching Shopify order found).`
-              : `No new matches found. Shopify returned ${syncResult.shopifyOrders} orders, ${syncResult.unlinkedBefore} bookings have no order yet — customers may not have completed checkout.`
+              : `No new matches found. Shopify returned ${syncResult.shopifyOrders} orders, ${syncResult.unlinkedBefore} bookings have no order yet - customers may not have completed checkout.`
             }
           </div>
         )}
@@ -615,7 +617,7 @@ export default function BookingPage() {
             ))}
           </div>
           <span style={{ fontSize: 13, color: "#6d7175", paddingBottom: 8 }}>
-            {filtered.length} booking{filtered.length !== 1 ? "s" : ""} — {new Set(filtered.map((b) => b.apartment)).size} product{new Set(filtered.map((b) => b.apartment)).size !== 1 ? "s" : ""}
+            {filtered.length} booking{filtered.length !== 1 ? "s" : ""} - {new Set(filtered.map((b) => b.apartment)).size} product{new Set(filtered.map((b) => b.apartment)).size !== 1 ? "s" : ""}
           </span>
         </div>
 
@@ -732,7 +734,10 @@ export default function BookingPage() {
 
                         {/* Apartment */}
                         <td style={{ ...tdStyle, color: "#6d7175", fontSize: 13 }}>
-                          {b.apartment}
+                          <div>{b.apartment}</div>
+                          <div style={{ fontSize: 11, marginTop: 2, color: "#8c9196", textTransform: "capitalize" }}>
+                            {b.listingType}
+                          </div>
                         </td>
 
                         {/* Check-in */}
@@ -770,7 +775,7 @@ export default function BookingPage() {
                               )}
                             </div>
                           ) : (
-                            <span style={{ color: "#c9cccf" }}>—</span>
+                            <span style={{ color: "#c9cccf" }}>-</span>
                           )}
                         </td>
 
@@ -789,7 +794,7 @@ export default function BookingPage() {
                           </span>
                         </td>
 
-                        {/* Actions — Manage dropdown */}
+                        {/* Actions - Manage dropdown */}
                         <td style={{ ...tdStyle, textAlign: "center", position: "relative" }}>
                           <div data-manage-dropdown style={{ position: "relative", display: "inline-block" }}>
                             <button

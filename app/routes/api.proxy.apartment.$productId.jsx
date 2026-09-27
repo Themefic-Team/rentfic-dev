@@ -43,6 +43,7 @@ export const loader = async ({ request, params }) => {
     apartment: {
       id: apartment.id,
       name: apartment.name,
+      listingType: s.listingType ?? "property",
       description: s.description ?? null,
       bookingType: s.bookingType ?? "single",
       pricePerNight: apartment.pricePerNight ?? 0,

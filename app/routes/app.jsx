@@ -39,7 +39,7 @@ export const loader = async ({ request }) => {
 
     renewalDate = sub?.currentPeriodEnd ?? null;
 
-    // Never overwrite plan — managed by billing webhook
+    // Never overwrite plan - managed by billing webhook
     await prisma.shop.upsert({
       where:  { shop },
       update: {
@@ -64,21 +64,21 @@ export const loader = async ({ request }) => {
     console.error("Failed to sync shop details:", e);
   }
 
-  const [shopRecord, apartmentCount] = await Promise.all([
+  const [shopRecord, listingCount] = await Promise.all([
     prisma.shop.findUnique({ where: { shop } }),
     prisma.apartment.count({ where: { shop } }),
   ]);
 
   const appPlan = shopRecord?.plan ?? "free";
   const limits  = getPlanLimits(appPlan);
-  const apartmentLimit = limits.apartments === Infinity ? null : limits.apartments;
+  const listingLimit = limits.listings === Infinity ? null : limits.listings;
 
   // eslint-disable-next-line no-undef
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     appPlan,
-    apartmentCount,
-    apartmentLimit,
+    listingCount,
+    listingLimit,
     renewalDate,
   };
 };
@@ -91,7 +91,7 @@ export default function App() {
       <PolarisProvider i18n={enTranslations}>
         <s-app-nav>
           <s-link href="/app">Dashboard</s-link>
-          <s-link href="/app/apartments">Apartments Settings</s-link>
+          <s-link href="/app/apartments">Rentals</s-link>
           <s-link href="/app/settings">Global Settings</s-link>
           <s-link href="/app/booking">Booking</s-link>
           <s-link href="/app/notifications">Notifications</s-link>

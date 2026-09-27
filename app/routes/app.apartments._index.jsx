@@ -17,6 +17,7 @@ export const loader = async ({ request }) => {
     prisma.shop.findUnique({ where: { shop } }),
   ]);
   const limits = getPlanLimits(shopRecord?.plan);
+  const listingLimit = limits.listings;
 
   // Batch-fetch product images + handles from Shopify Admin API
   const productIds = [...new Set(apartments.map((a) => a.productId).filter(Boolean))];
@@ -55,7 +56,7 @@ export const loader = async ({ request }) => {
 
   return {
     apartments: enrichedApartments,
-    apartmentLimit: limits.apartments,
+    listingLimit: limits.listings,
     shop,
   };
 };
@@ -148,8 +149,8 @@ function timeAgo(date) {
 
 
 export default function ApartmentsIndexPage() {
-  const { apartments, apartmentLimit, shop } = useLoaderData();
-  const atLimit = apartmentLimit !== Infinity && apartments.length >= apartmentLimit;
+  const { apartments, listingLimit, shop } = useLoaderData();
+  const atLimit = listingLimit !== Infinity && apartments.length >= listingLimit;
   const submit = useSubmit();
   const navigate = useNavigate();
   const shopify = useAppBridge();
@@ -207,7 +208,7 @@ export default function ApartmentsIndexPage() {
 
   const handleCreate = async () => {
     if (atLimit) {
-      shopify.toast.show(`Free plan allows ${apartmentLimit} apartment. Upgrade to add more.`, { isError: true });
+      shopify.toast.show(`Free plan allows ${listingLimit} rental. Upgrade to add more.`, { isError: true });
       return;
     }
     const result = await shopify.resourcePicker({ type: "product", multiple: false });
@@ -215,7 +216,7 @@ export default function ApartmentsIndexPage() {
     if (!items.length) return;
     const p = items[0];
     if (existingProductIds.has(p.id)) {
-      shopify.toast.show("An apartment already exists for this product", { isError: true });
+      shopify.toast.show("A rental listing already exists for this product", { isError: true });
       return;
     }
     const params = new URLSearchParams({ productId: p.id, productTitle: p.title });
@@ -233,7 +234,7 @@ export default function ApartmentsIndexPage() {
 
   const handleDuplicate = (id, name) => {
     if (atLimit) {
-      shopify.toast.show(`Free plan allows ${apartmentLimit} apartment. Upgrade to add more.`, { isError: true });
+      shopify.toast.show(`Free plan allows ${listingLimit} rental. Upgrade to add more.`, { isError: true });
       return;
     }
     if (window.confirm(`Duplicate "${name}"?`)) {
@@ -247,27 +248,26 @@ export default function ApartmentsIndexPage() {
 
   if (apartments.length === 0) {
     return (
-      <s-page heading="Apartments">
+      <s-page heading="Rentals">
         <s-button slot="primary-action" onClick={handleCreate} disabled={atLimit ? "" : undefined}>
-          {atLimit ? "Plan Limit Reached" : "Create Apartment"}
+          {atLimit ? "Plan Limit Reached" : "Add Rental"}
         </s-button>
         <PlanCard />
         <s-section>
           <div style={emptyStyle}>
             <img
               src="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-              alt="No apartments"
+              alt="No rentals"
               style={{ width: 160, opacity: 0.7 }}
             />
             <div style={{ fontSize: "18px", fontWeight: 600, color: "#202223" }}>
-              Manage your rental apartments
+              Add your first rental listing
             </div>
             <div style={{ fontSize: "14px", color: "#6d7175", maxWidth: 400 }}>
-              Connect your Shopify products to rental apartments and manage
-              pricing, availability, and customization.
+              Connect any Shopify product to a rental listing - apartments, equipment, vehicles, clothing, experiences, and more.
             </div>
             <button onClick={handleCreate} style={createBtnStyle}>
-              Create Apartment
+              Add Rental
             </button>
           </div>
         </s-section>
@@ -276,9 +276,9 @@ export default function ApartmentsIndexPage() {
   }
 
   return (
-    <s-page heading="Apartments">
+    <s-page heading="Rentals">
       <s-button slot="primary-action" onClick={handleCreate}>
-        Create Apartment
+        Add Rental
       </s-button>
       <PlanCard />
 
@@ -305,7 +305,7 @@ export default function ApartmentsIndexPage() {
                 style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#008060" }}
               />
               <span style={{ fontSize: "14px", color: "#202223", fontWeight: 500 }}>
-                {filtered.length} Product{filtered.length !== 1 ? "s" : ""}
+                {filtered.length} Rental{filtered.length !== 1 ? "s" : ""}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -332,7 +332,7 @@ export default function ApartmentsIndexPage() {
           {/* Bulk Actions Bar */}
           {selected.size > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", background: "#f4f6f8", borderBottom: "1px solid #e1e3e5" }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#202223" }}>{selected.size} apartments selected</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#202223" }}>{selected.size} listing{selected.size !== 1 ? 's' : ''} selected</span>
               <button
                 onClick={() => submitBulk("activate")}
                 style={{ padding: "5px 12px", fontSize: 13, fontWeight: 500, borderRadius: 4, border: "1px solid #c9cccf", background: "#fff", cursor: "pointer" }}
@@ -357,7 +357,7 @@ export default function ApartmentsIndexPage() {
           {/* Rows */}
           {paginated.length === 0 ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#6d7175", fontSize: 14 }}>
-              No apartments match your search.
+              No rentals match your search.
             </div>
           ) : (
             paginated.map((apt, i) => (
@@ -417,7 +417,11 @@ export default function ApartmentsIndexPage() {
                   {/* Price */}
                   {apt.pricePerNight != null && (
                     <span style={{ fontSize: 13, color: "#6d7175" }}>
-                      ${apt.pricePerNight.toFixed(2)}/night
+                      ${apt.pricePerNight.toFixed(2)}
+                      {apt.settings?.listingType === 'equipment' || apt.settings?.listingType === 'vehicle' ? '/day'
+                        : apt.settings?.listingType === 'clothing' || apt.settings?.listingType === 'other' ? '/booking'
+                        : apt.settings?.listingType === 'experience' ? '/session'
+                        : '/night'}
                     </span>
                   )}
                 </div>
@@ -446,7 +450,7 @@ export default function ApartmentsIndexPage() {
                     >
                       <Icon source={CalendarIcon} />
                     </button>
-                    {/* View Live — opens the product's storefront page */}
+                    {/* View Live - opens the product's storefront page */}
                     {(apt.productStoreUrl || apt.productHandle) && (
                       <a
                         href={

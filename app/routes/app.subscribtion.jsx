@@ -85,7 +85,7 @@ export const loader = async ({ request }) => {
       shopifyPlan = planKeyFromName(appSubscriptions[0].name);
     }
   } catch (_) {
-    // billing.check throws when no active subscription — that's fine
+    // billing.check throws when no active subscription - that's fine
   }
 
   // Fetch real billing history from Shopify
@@ -278,7 +278,7 @@ export default function SubscriptionPage() {
       {/* Plans */}
       <s-section heading="Choose a Plan">
         <s-paragraph>
-          Upgrade at any time. All paid plans include a 7-day free trial — no
+          Upgrade at any time. All paid plans include a 7-day free trial - no
           credit card required to start.
         </s-paragraph>
 
@@ -344,7 +344,7 @@ export default function SubscriptionPage() {
             const price = billing === "yearly" && plan.price > 0
               ? Math.round(plan.price * 0.8)
               : plan.price;
-            const planKey = plan.key; // "pro" | "business" — action resolves yearly variant
+            const planKey = plan.key; // "pro" | "business" - action resolves yearly variant
 
             return (
               <div
@@ -548,7 +548,7 @@ export default function SubscriptionPage() {
                   <tr>
                     <td style={tdStyle} colSpan={5}>
                       <div style={{ textAlign: "center", padding: "24px 0", color: "#6d7175", fontSize: 14 }}>
-                        No invoices yet — upgrade to a paid plan to see billing history.
+                        No invoices yet - upgrade to a paid plan to see billing history.
                       </div>
                     </td>
                   </tr>
@@ -573,11 +573,11 @@ export default function SubscriptionPage() {
                 {invoices.map((inv, i) => {
                   const date = inv.createdAt
                     ? new Date(inv.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-                    : "—";
+                    : "-";
                   const amount = inv.amount != null
                     ? new Intl.NumberFormat("en-US", { style: "currency", currency: inv.currency }).format(inv.amount)
-                    : "—";
-                  const interval = inv.interval === "ANNUAL" ? "Yearly" : inv.interval === "EVERY_30_DAYS" ? "Monthly" : "—";
+                    : "-";
+                  const interval = inv.interval === "ANNUAL" ? "Yearly" : inv.interval === "EVERY_30_DAYS" ? "Monthly" : "-";
                   const statusCfg = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
                   return (
                     <tr key={inv.id} style={{ borderBottom: i < invoices.length - 1 ? "1px solid #f1f2f3" : "none" }}>

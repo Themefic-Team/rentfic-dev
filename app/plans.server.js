@@ -1,7 +1,7 @@
 export const PLAN_LIMITS = {
-  free:     { apartments: 1,        analytics: false },
-  pro:      { apartments: Infinity, analytics: false },
-  business: { apartments: Infinity, analytics: true  },
+  free:     { listings: 1,        analytics: false },
+  pro:      { listings: Infinity, analytics: false },
+  business: { listings: Infinity, analytics: true  },
 };
 
 export const BILLING_PLANS = {
@@ -19,7 +19,7 @@ export function planKeyFromName(name) {
   if (!name) return "free";
   const lower = name.toLowerCase();
   // "Pro Yearly" and "Business Yearly" map to the same DB plan key as their
-  // monthly counterparts — no schema change needed for yearly billing.
+  // monthly counterparts - no schema change needed for yearly billing.
   if (lower.includes("business")) return "business";
   if (lower.includes("pro"))      return "pro";
   return "free";

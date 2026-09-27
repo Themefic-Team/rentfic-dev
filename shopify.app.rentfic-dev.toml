@@ -1,19 +1,15 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "f3d840993d3d3355cdf7b71d36f079f1"
+name = "Rentfic-qa"
 application_url = "https://rentfic-dev.onrender.com/"
 embedded = true
-name = "Rentfic-qa"
 
 [build]
 automatically_update_urls_on_dev = true
 
 [webhooks]
 api_version = "2026-07"
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
@@ -23,9 +19,13 @@ api_version = "2026-07"
   uri = "/webhooks/app_subscriptions/update"
   topics = [ "app_subscriptions/update" ]
 
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_inventory,write_metaobject_definitions,write_metaobjects,read_orders,write_orders,write_products,read_themes"
+scopes = "read_orders,read_themes,write_inventory,write_metaobject_definitions,write_metaobjects,write_orders,write_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
@@ -64,4 +64,3 @@ required = true
 [metaobjects.app.example.fields.description]
 name = "Description"
 type = "multi_line_text_field"
-

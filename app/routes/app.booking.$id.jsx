@@ -32,16 +32,17 @@ export const loader = async ({ request, params }) => {
   return {
     booking: {
       id:            booking.id,
-      guest:         booking.customerName  || "—",
+      guest:         booking.customerName  || "-",
       email:         booking.customerEmail || null,
-      apartment:     booking.productTitle  || "—",
+      apartment:     booking.productTitle  || "-",
       apartmentId:   booking.apartmentId,
+      listingType:   apartment?.settings?.listingType || 'property',
       checkIn:       booking.startDate,
       checkOut:      booking.endDate,
       checkInFmt:    fmtDate(booking.startDate),
       checkOutFmt:   fmtDate(booking.endDate),
       nights:        booking.nights ?? 1,
-      total:         booking.totalPrice != null ? fmtCurrency(booking.totalPrice) : "—",
+      total:         booking.totalPrice != null ? fmtCurrency(booking.totalPrice) : "-",
       totalRaw:      booking.totalPrice,
       depositAmount: booking.depositAmount != null ? fmtCurrency(booking.depositAmount) : null,
       depositRaw:    booking.depositAmount,
@@ -82,7 +83,7 @@ async function createDraftOrder(admin, booking, balanceAmount) {
     variables: {
       input: {
         lineItems: [{
-          title: `Balance Due — ${booking.productTitle} (${dateLabel})`,
+          title: `Balance Due - ${booking.productTitle} (${dateLabel})`,
           quantity: 1,
           originalUnitPrice: balanceAmount.toFixed(2),
         }],
@@ -238,7 +239,7 @@ export const action = async ({ request, params }) => {
 };
 
 function fmtDate(str) {
-  if (!str) return "—";
+  if (!str) return "-";
   const [y, m, d] = str.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
@@ -283,7 +284,7 @@ export default function BookingDetail() {
 
   // ── Edit state ─────────────────────────────────────────────────────────────
   const [editing,       setEditing]       = useState(false);
-  const [guestName,     setGuestName]     = useState(booking.guest === "—" ? "" : booking.guest);
+  const [guestName,     setGuestName]     = useState(booking.guest === "-" ? "" : booking.guest);
   const [guestEmail,    setGuestEmail]    = useState(booking.email ?? "");
   const [checkIn,       setCheckIn]       = useState(booking.checkIn  ?? "");
   const [checkOut,      setCheckOut]      = useState(booking.checkOut ?? "");
@@ -333,7 +334,7 @@ export default function BookingDetail() {
   };
 
   const cancelEdit = () => {
-    setGuestName(booking.guest === "—" ? "" : booking.guest);
+    setGuestName(booking.guest === "-" ? "" : booking.guest);
     setGuestEmail(booking.email ?? "");
     setCheckIn(booking.checkIn  ?? "");
     setCheckOut(booking.checkOut ?? "");
@@ -480,7 +481,16 @@ export default function BookingDetail() {
               </code>
             } />
             <Row label="Apartment" value={
-              <span style={{ fontWeight: 600 }}>{booking.apartment}</span>
+              <div>
+                <span style={{ fontWeight: 600 }}>{booking.apartment}</span>
+                <div style={{
+                  display: "inline-block", background: "#f4f6f8", padding: "2px 8px",
+                  borderRadius: 12, fontSize: 12, fontWeight: 500, marginTop: 4,
+                  textTransform: "capitalize", border: "1px solid #e1e3e5", marginLeft: 8
+                }}>
+                  {booking.listingType}
+                </div>
+              </div>
             } />
             <Row label="Booking Type" value={
               <span style={{

@@ -57,7 +57,7 @@ export const DEFAULT_TEMPLATES = {
   },
   ownerBookingCancelled: {
     enabled: true,
-    subject: "Booking Cancelled — {{product.name}}",
+    subject: "Booking Cancelled - {{product.name}}",
     body: "A booking has been cancelled.\n\nProperty: {{product.name}}\nGuest:    {{customer.firstName}} {{customer.lastName}}\nDates:    {{start}} – {{end}}\nOrder:    {{order.name}}",
     timing: null,
     groupMails: false,

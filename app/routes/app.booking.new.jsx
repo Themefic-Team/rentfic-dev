@@ -303,7 +303,7 @@ export default function NewBookingPage() {
 
           </div>
 
-          {/* ── Right column — pricing + submit ── */}
+          {/* ── Right column - pricing + submit ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
             <s-section heading="Pricing">
@@ -386,11 +386,11 @@ export default function NewBookingPage() {
               fontSize: 13,
             }}>
               <div style={{ fontWeight: 600, color: "#202223", marginBottom: 8 }}>Booking Summary</div>
-              <SummaryRow label="Apartment" value={selectedApt?.name || "—"} />
-              <SummaryRow label="Check-in"  value={startDate || "—"} />
-              <SummaryRow label="Check-out" value={endDate   || "—"} />
-              <SummaryRow label="Nights"    value={nights > 0 ? `${nights}` : "—"} />
-              <SummaryRow label="Total"     value={totalPrice ? `$${parseFloat(totalPrice).toFixed(2)}` : "—"} />
+              <SummaryRow label="Apartment" value={selectedApt?.name || "-"} />
+              <SummaryRow label="Check-in"  value={startDate || "-"} />
+              <SummaryRow label="Check-out" value={endDate   || "-"} />
+              <SummaryRow label="Nights"    value={nights > 0 ? `${nights}` : "-"} />
+              <SummaryRow label="Total"     value={totalPrice ? `$${parseFloat(totalPrice).toFixed(2)}` : "-"} />
               <SummaryRow label="Status"    value={status.charAt(0).toUpperCase() + status.slice(1)} />
             </div>
 

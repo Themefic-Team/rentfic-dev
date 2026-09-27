@@ -179,7 +179,7 @@ export const action = async ({ request }) => {
   const parsedQuantity = Math.max(1, parseInt(quantity) || 1);
   const s = apartment.settings ?? {};
 
-  // Stock check — count booked units overlapping these dates
+  // Stock check - count booked units overlapping these dates
   if (s.quantityEnabled && s.stockQuantity) {
     const overlapping = await prisma.booking.findMany({
       where: {

@@ -37,19 +37,19 @@ export const action = async ({ request }) => {
       if (!booking.customerEmail) continue;
       const vars = buildVars(shop, booking);
 
-      // Check-in Day — send on startDate
+      // Check-in Day - send on startDate
       if (booking.startDate === fmt(today)) {
         const r = await maybeSend(shop, booking, "checkinDay", vars);
         r.sent ? sent++ : skipped++;
       }
 
-      // Check-out Reminder — send the day before endDate
+      // Check-out Reminder - send the day before endDate
       if (booking.endDate && booking.endDate === fmt(tomorrow)) {
         const r = await maybeSend(shop, booking, "checkoutReminder", vars);
         r.sent ? sent++ : skipped++;
       }
 
-      // Booking Reminder — X days before check-in
+      // Booking Reminder - X days before check-in
       const reminderTpl = { ...DEFAULT_TEMPLATES.bookingReminder, ...(savedTpls.bookingReminder ?? {}) };
       if (reminderTpl.enabled && reminderTpl.timing && booking.startDate) {
         const dueDate = fmt(addDays(parseDate(booking.startDate), -reminderTpl.timing));
@@ -59,7 +59,7 @@ export const action = async ({ request }) => {
         }
       }
 
-      // Review Request — X days after check-out
+      // Review Request - X days after check-out
       const reviewTpl = { ...DEFAULT_TEMPLATES.reviewRequest, ...(savedTpls.reviewRequest ?? {}) };
       if (reviewTpl.enabled && reviewTpl.timing && booking.endDate) {
         const dueDate = fmt(addDays(parseDate(booking.endDate), reviewTpl.timing));

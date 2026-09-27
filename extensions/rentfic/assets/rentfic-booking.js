@@ -443,13 +443,13 @@
       return this._isInBounds(date) && !this._isBlocked(date) && this._isWeekdayOn(date);
     }
 
-    // Visual selectability — extends _isSelectable with state-aware min/max day constraints
+    // Visual selectability - extends _isSelectable with state-aware min/max day constraints
     _isCalendarSelectable(date) {
       if (!this._isSelectable(date)) return false;
       const { bookingType, minDays, maxDays } = this.apartment;
 
       // Range: once start is picked but end isn't, constrain the valid end-date window.
-      // Disabled dates inside the window are skipped — they don't count toward min/max.
+      // Disabled dates inside the window are skipped - they don't count toward min/max.
       if (bookingType === 'range' && this.startDate && !this.endDate) {
         // The start date itself stays clickable (so user can click it to clear the selection)
         if (this._toStr(date) === this._toStr(this.startDate)) return true;
@@ -636,7 +636,7 @@
         }
       } else {
         if (!this.startDate || (this.startDate && this.endDate)) {
-          // No selection yet, or both dates already set — start fresh
+          // No selection yet, or both dates already set - start fresh
           this.startDate = date; this.endDate = null; this.hoverDate = null;
         } else if (this._toStr(date) === this._toStr(this.startDate)) {
           // Clicking the start date again clears the entire selection
@@ -733,11 +733,24 @@
       const nights = this._calcNights();
       const total  = this._calcTotal();
       const fp     = this.shopSettings.fromPrice || 'automatic';
+      const lt     = this.apartment.listingType || 'property';
+
+      // Dynamic price unit label based on listing type
+      const priceUnit = (lt === 'equipment' || lt === 'vehicle') ? 'day'
+        : lt === 'experience' ? 'session'
+        : (lt === 'clothing' || lt === 'other') ? 'booking'
+        : 'night'; // property default
+
+      // Duration label in the summary pill
+      const unitLabel = priceUnit === 'night' ? ('night' + (nights !== 1 ? 's' : ''))
+        : priceUnit === 'day' ? ('day' + (nights !== 1 ? 's' : ''))
+        : priceUnit === 'session' ? ('session' + (nights !== 1 ? 's' : ''))
+        : ('booking' + (nights !== 1 ? 's' : ''));
 
       let priceHtml = '';
       if (fp !== 'disabled') {
         const showFrom = !hasSel && fp !== 'automatic';
-        const perLabel = fp === 'minimum_per_day' ? '/ day' : '/ night';
+        const perLabel = fp === 'minimum_per_day' ? '/ day' : ('/ ' + priceUnit);
         priceHtml = `
           <div style="display:flex;align-items:baseline;gap:6px">
             ${showFrom ? `<span class="rentfic-price-per">From</span>` : ''}
@@ -753,7 +766,7 @@
           ${hasSel && nights > 0 ? `
             <div class="rf-total-pill">
               Total: <strong>${this._fmtPrice(total)}</strong>
-              <span class="rf-total-nights">(${nights} night${nights !== 1 ? 's' : ''})</span>
+              <span class="rf-total-nights">(${nights} ${unitLabel})</span>
             </div>` : ''}
         </div>
       `;
@@ -782,14 +795,29 @@
     }
 
     _renderInfoStrip() {
-      const { bedrooms, bathrooms, maxGuests, checkInTime, checkOutTime, minDays, city, country } = this.apartment;
+      const { bedrooms, bathrooms, maxGuests, checkInTime, checkOutTime, minDays, city, country, listingType } = this.apartment;
+      const lt    = listingType || 'property';
+      const isProperty = lt === 'property';
       const items = [];
-      if (bedrooms)    items.push(`${ICONS.bed} ${bedrooms} bed${bedrooms !== 1 ? 's' : ''}`);
-      if (bathrooms)   items.push(`${ICONS.bath} ${bathrooms} bath${bathrooms !== 1 ? 's' : ''}`);
-      if (maxGuests)   items.push(`${ICONS.person} Max ${maxGuests} guests`);
-      if (checkInTime)  items.push(`${ICONS.key} Check-in ${this._fmtTime(checkInTime)}`);
-      if (checkOutTime) items.push(`${ICONS.door} Check-out ${this._fmtTime(checkOutTime)}`);
-      if (minDays > 1) items.push(this.apartment.bookingType === 'multiple' ? `${ICONS.calendar} Min ${minDays} dates` : `${ICONS.moon} Min ${minDays} nights`);
+      // Bedrooms/bathrooms only meaningful for properties
+      if (isProperty && bedrooms)    items.push(`${ICONS.bed} ${bedrooms} bed${bedrooms !== 1 ? 's' : ''}`);
+      if (isProperty && bathrooms)   items.push(`${ICONS.bath} ${bathrooms} bath${bathrooms !== 1 ? 's' : ''}`);
+      if (maxGuests) {
+        const guestLabel = (lt === 'vehicle') ? 'seats' : 'guests';
+        items.push(`${ICONS.person} Max ${maxGuests} ${guestLabel}`);
+      }
+      // Time fields dynamically labeled
+      const timeLabelIn = isProperty ? 'Check-in' : 'Pickup';
+      const timeLabelOut = isProperty ? 'Check-out' : 'Return';
+      if (checkInTime)  items.push(`${ICONS.key} ${timeLabelIn} ${this._fmtTime(checkInTime)}`);
+      if (checkOutTime) items.push(`${ICONS.door} ${timeLabelOut} ${this._fmtTime(checkOutTime)}`);
+      // Duration label adapts to type
+      const unitWord = (lt === 'equipment' || lt === 'vehicle') ? 'days'
+        : lt === 'experience' ? 'sessions'
+        : (lt === 'clothing' || lt === 'other') ? 'bookings' : 'nights';
+      if (minDays > 1) items.push(this.apartment.bookingType === 'multiple'
+        ? `${ICONS.calendar} Min ${minDays} dates`
+        : `${ICONS.moon} Min ${minDays} ${unitWord}`);
       if (city || country) items.push(`${ICONS.location} ${[city, country].filter(Boolean).join(', ')}`);
       if (!items.length) return '';
       return `
@@ -822,7 +850,7 @@
 
     _renderLocation() {
       const { address, city, country } = this.apartment;
-      if (!city && !country) return '';
+      if (!address && !city && !country) return '';
       const locationStr = [address, city, country].filter(Boolean).join(', ');
       const mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(locationStr);
       return `
@@ -861,8 +889,35 @@
     }
 
     _renderGuestSelector() {
-      const { maxAdults, maxChildren, maxInfants, maxGuests } = this.apartment;
+      const { listingType, maxAdults, maxChildren, maxInfants, maxGuests } = this.apartment;
+      const lt = listingType || 'property';
+      
+      if (lt !== 'property' && lt !== 'experience' && lt !== 'vehicle') return '';
+
       const totalG = this._totalGuests();
+
+      if (lt === 'vehicle') {
+        const val = this.guests.adults; // reuse 'adults' state to track passengers
+        const atMin = val <= 1;
+        const atMax = maxGuests != null && val >= maxGuests;
+        
+        return `
+          <div class="rf-guest-section">
+            <div class="rf-section-title">Passengers</div>
+            <div class="rf-guest-row">
+              <div class="rf-guest-label">
+                <span class="rf-guest-name">Seats</span>
+                <span class="rf-guest-sub">${maxGuests ? `max ${maxGuests}` : 'Number of passengers'}</span>
+              </div>
+              <div class="rf-stepper">
+                <button class="rf-step-btn" data-guest="adults" data-dir="-1" ${atMin ? 'disabled' : ''}>−</button>
+                <span class="rf-step-val">${val}</span>
+                <button class="rf-step-btn" data-guest="adults" data-dir="1" ${atMax ? 'disabled' : ''}>+</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
 
       const rows = [
         { key: 'adults',   label: this.t.adults,   sub: this.t.adultsAges,   min: 1, max: maxAdults },
@@ -979,17 +1034,28 @@
     }
 
     _renderSummary(nights, total, deposit) {
-      const { bookingType, pricePerNight } = this.apartment;
+      const { bookingType, pricePerNight, listingType } = this.apartment;
+      const lt     = listingType || 'property';
       const base   = this.quantity * nights * (pricePerNight || 0);
       const fees   = this._calcFees(nights);
       const disc   = this._calcDiscount(base, nights);
+
+      // Dynamic unit labels based on rental category
+      const unitSingular = (lt === 'equipment' || lt === 'vehicle') ? 'day'
+        : lt === 'other' ? 'booking'
+        : 'night';
+      const unitPlural = (lt === 'equipment' || lt === 'vehicle') ? 'days'
+        : lt === 'other' ? 'bookings'
+        : 'nights';
+      const perUnitLabel = (lt === 'equipment' || lt === 'vehicle') ? '(per day)'
+        : lt === 'other' ? '(per booking)'
+        : '(per night)';
+      const unitLabel = nights !== 1 ? unitPlural : unitSingular;
 
       let dateLabel = '';
       if      (bookingType === 'range'    && this.startDate && this.endDate) dateLabel = `${this._toStr(this.startDate)} &rarr; ${this._toStr(this.endDate)}`;
       else if (bookingType === 'single'   && this.startDate)                 dateLabel = this._toStr(this.startDate);
       else if (bookingType === 'multiple')                                   dateLabel = this.t.datesSelected(nights);
-
-      const nightLabel = nights !== 1 ? this.t.nights : this.t.night;
 
       return `
         <div class="rentfic-summary">
@@ -997,13 +1063,13 @@
           ${dateLabel ? `<div class="rf-sum-row rf-sum-dates"><span>${dateLabel}</span></div>` : ''}
           <div class="rf-sum-row">
             <span>
-              ${this.quantity > 1 ? `${this.quantity} ${this.t.units} × ` : ''}${nights} ${nightLabel} × ${this._fmtPrice(pricePerNight)}
+              ${this.quantity > 1 ? `${this.quantity} ${this.t.units} × ` : ''}${nights} ${unitLabel} × ${this._fmtPrice(pricePerNight)}
             </span>
             <span>${this._fmtPrice(base)}</span>
           </div>
           ${fees.map(fee => `
             <div class="rf-sum-row rf-fee-row">
-              <span>${fee.name}${fee.applyPer === 'night' ? ` <em>${this.t.perNight}</em>` : ''}</span>
+              <span>${fee.name}${fee.applyPer === 'night' ? ` <em>${perUnitLabel}</em>` : ''}</span>
               <span>${this._fmtPrice(fee.computed)}</span>
             </div>
           `).join('')}
@@ -1155,7 +1221,7 @@
       }
 
       try {
-        // 1. Create booking — server recalculates total and updates variant price
+        // 1. Create booking - server recalculates total and updates variant price
         const bRes  = await fetch('/apps/rentfic/booking', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1181,18 +1247,27 @@
           return;
         }
 
+        const timeLabelIn = (this.apartment.listingType === 'property') ? 'Check-in' : 'Pickup';
+        const timeLabelOut = (this.apartment.listingType === 'property') ? 'Check-out' : 'Return';
+        const durationLabel = (this.apartment.listingType === 'property') ? 'Nights' : 'Days';
+        
         const properties = {
-          'Check-in':     startDate,
-          'Check-out':    endDate,
-          'Nights':       String(nights),
+          [timeLabelIn]:  startDate,
+          [timeLabelOut]: endDate,
+          [durationLabel]: String(nights),
           'Units':        String(this.quantity),
-          'Adults':       String(this.guests.adults),
-          'Children':     String(this.guests.children),
-          'Infants':      String(this.guests.infants),
-          'Total Guests': String(this._totalGuests()),
           'Total Price':  this._fmtPrice(bData.finalTotal),
           '_booking_id':  bData.bookingId,
         };
+
+        if (this.apartment.listingType === 'vehicle') {
+          properties['Passengers'] = String(this.guests.adults);
+        } else if (this.apartment.listingType === 'property' || this.apartment.listingType === 'experience') {
+          properties['Adults'] = String(this.guests.adults);
+          properties['Children'] = String(this.guests.children);
+          properties['Infants'] = String(this.guests.infants);
+          properties['Total Guests'] = String(this._totalGuests());
+        }
         if (bookingDates) properties['Dates'] = bookingDates.join(', ');
         if (bData.isDeposit) {
           properties['Deposit'] = this._fmtPrice(bData.depositCharged);

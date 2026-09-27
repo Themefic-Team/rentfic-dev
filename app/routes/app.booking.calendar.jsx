@@ -126,7 +126,7 @@ export default function BookingCalendar() {
   const nextParam = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
 
   return (
-    <s-page heading="Bookings — Calendar View">
+    <s-page heading="Bookings - Calendar View">
 
       {/* View toggle + New Booking */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -245,7 +245,7 @@ export default function BookingCalendar() {
                             <button
                               key={b.id}
                               onClick={() => navigate(`/app/booking/${b.id}`)}
-                              title={`${b.customerName || "Guest"} — ${b.productTitle}`}
+                              title={`${b.customerName || "Guest"} - ${b.productTitle}`}
                               style={{
                                 display: "block", width: "100%", textAlign: "left",
                                 padding: "2px 5px", borderRadius: 4,
