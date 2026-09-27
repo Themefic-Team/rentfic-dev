@@ -1,6 +1,6 @@
 /* ── Rentfic Booking Widget ───────────────────────────────────── */
 .rentfic-widget {
-  --rf-primary: #008060;
+  --rf-primary: #FD4A52;
   --rf-primary-light: color-mix(in srgb, var(--rf-primary) 12%, transparent);
   --rf-border: #e5e7eb;
   --rf-text: #1a1a1a;
@@ -28,7 +28,7 @@
   width: 28px;
   height: 28px;
   border: 3px solid var(--rf-border, #e5e7eb);
-  border-top-color: var(--rf-primary, #008060);
+  border-top-color: var(--rf-primary, #FD4A52);
   border-radius: 50%;
   animation: rf-spin 0.7s linear infinite;
 }

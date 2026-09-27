@@ -88,6 +88,13 @@ export default function App() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
+      <style>{`
+        :root {
+          --p-color-primary: #FD4A52;
+          --p-color-primary-light: #F4D9DA;
+          --p-color-primary-transparent: #FD4A5255;
+        }
+      `}</style>
       <PolarisProvider i18n={enTranslations}>
         <s-app-nav>
           <s-link href="/app">Dashboard</s-link>

@@ -373,7 +373,7 @@ export default function NotificationsPage() {
                 type="checkbox"
                 checked={tpl.enabled}
                 onChange={(e) => setTpl("enabled", e.target.checked)}
-                style={{ width: 16, height: 16, accentColor: "#008060", cursor: "pointer" }}
+                style={{ width: 16, height: 16, accentColor: "var(--p-color-primary, #FD4A52)", cursor: "pointer" }}
               />
               Enable this notification
             </label>
@@ -438,7 +438,7 @@ export default function NotificationsPage() {
                 type="checkbox"
                 checked={tpl.groupMails}
                 onChange={(e) => setTpl("groupMails", e.target.checked)}
-                style={{ marginTop: 2, width: 16, height: 16, accentColor: "#008060", cursor: "pointer", flexShrink: 0 }}
+                style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--p-color-primary, #008060)", cursor: "pointer", flexShrink: 0 }}
               />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>Group emails for same order</div>
@@ -518,11 +518,11 @@ export default function NotificationsPage() {
                 value="smtp"
                 checked={emailProvider === "smtp"}
                 onChange={() => { setEmailProvider("smtp"); setIsDirty(true); }}
-                style={{ accentColor: "#008060" }}
+                style={{ accentColor: "var(--p-color-primary, #008060)" }}
               />
               <div>
                 <span style={{ fontWeight: 500 }}>SMTP</span>
-                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 10, background: "#008060", color: "#fff" }}>
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 10, background: "var(--p-color-primary, #008060)", color: "#fff" }}>
                   Recommended
                 </span>
               </div>
@@ -534,7 +534,7 @@ export default function NotificationsPage() {
                 value="default"
                 checked={emailProvider === "default"}
                 onChange={() => { setEmailProvider("default"); setIsDirty(true); }}
-                style={{ accentColor: "#008060" }}
+                style={{ accentColor: "var(--p-color-primary, #008060)" }}
               />
               <div>
                 <span style={{ fontWeight: 500 }}>Default</span>

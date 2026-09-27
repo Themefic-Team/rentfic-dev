@@ -237,7 +237,7 @@ export default function SubscriptionPage() {
                 width: 40,
                 height: 40,
                 borderRadius: "50%",
-                background: "#008060",
+                background: "var(--p-color-primary, #FD4A52)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -267,7 +267,7 @@ export default function SubscriptionPage() {
                   overflow: "hidden",
                 }}
               >
-                <div style={{ width: `${usedPct}%`, height: "100%", background: usedPct >= 100 ? "#d82c0d" : "#008060", borderRadius: 4 }} />
+                <div style={{ width: `${usedPct}%`, height: "100%", background: usedPct >= 100 ? "#d82c0d" : "var(--p-color-primary, #008060)", borderRadius: 4 }} />
               </div>
               <span style={{ fontSize: 12, color: "#6d7175" }}>{apartmentCount} / {limits}</span>
             </div>
@@ -320,7 +320,7 @@ export default function SubscriptionPage() {
                     fontWeight: 700,
                     padding: "1px 6px",
                     borderRadius: 8,
-                    background: "#008060",
+                    background: "var(--p-color-primary, #008060)",
                     color: "#fff",
                   }}
                 >
@@ -350,7 +350,7 @@ export default function SubscriptionPage() {
               <div
                 key={plan.key}
                 style={{
-                  border: `2px solid ${isCurrent ? "#008060" : plan.badge ? "#2c6ecb" : "#e1e3e5"}`,
+                  border: `2px solid ${isCurrent ? "var(--p-color-primary, #008060)" : plan.badge ? "#2c6ecb" : "#e1e3e5"}`,
                   borderRadius: 10,
                   padding: "20px 20px 24px",
                   position: "relative",
@@ -386,7 +386,7 @@ export default function SubscriptionPage() {
                       left: "50%",
                       transform: "translateX(-50%)",
                       padding: "2px 14px",
-                      background: "#008060",
+                      background: "var(--p-color-primary, #008060)",
                       color: "#fff",
                       fontSize: 11,
                       fontWeight: 700,
@@ -418,7 +418,7 @@ export default function SubscriptionPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, marginBottom: 20 }}>
                   {plan.features.map((f, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ color: f.included ? "#008060" : "#c9cccf", flexShrink: 0, display: "flex" }}>
+                      <span style={{ color: f.included ? "var(--p-color-primary, #008060)" : "#c9cccf", flexShrink: 0, display: "flex" }}>
                         <Icon source={f.included ? CheckSmallIcon : XSmallIcon} />
                       </span>
                       <span style={{ fontSize: 13, color: f.included ? "#202223" : "#c9cccf" }}>
@@ -433,10 +433,10 @@ export default function SubscriptionPage() {
                     style={{
                       textAlign: "center",
                       fontSize: 13,
-                      color: "#008060",
+                      color: "var(--p-color-primary, #008060)",
                       fontWeight: 600,
                       padding: "9px",
-                      border: "1px solid #008060",
+                      border: "1px solid var(--p-color-primary, #008060)",
                       borderRadius: 8,
                     }}
                   >
@@ -486,7 +486,7 @@ export default function SubscriptionPage() {
               <tr style={{ background: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
                 <th style={{ ...thStyle, textAlign: "left" }}>Feature</th>
                 {PLANS.map((p) => (
-                  <th key={p.key} style={{ ...thStyle, textAlign: "center", color: p.key === currentPlan ? "#008060" : "#202223" }}>
+                  <th key={p.key} style={{ ...thStyle, textAlign: "center", color: p.key === currentPlan ? "var(--p-color-primary, #008060)" : "#202223" }}>
                     {p.name}
                   </th>
                 ))}
@@ -511,7 +511,7 @@ export default function SubscriptionPage() {
                   {row.values.map((v, j) => (
                     <td key={j} style={{ ...tdStyle, textAlign: "center" }}>
                       {typeof v === "boolean" ? (
-                        <span style={{ color: v ? "#008060" : "#c9cccf", display: "inline-flex", justifyContent: "center" }}>
+                        <span style={{ color: v ? "var(--p-color-primary, #008060)" : "#c9cccf", display: "inline-flex", justifyContent: "center" }}>
                           <Icon source={v ? CheckSmallIcon : XSmallIcon} />
                         </span>
                       ) : (

@@ -5,7 +5,7 @@ import { ClipboardCheckFilledIcon, ChevronRightIcon  } from "@shopify/polaris-ic
 
 const PLAN_STYLE = {
   free:     { bg: "#f6f6f7", border: "#e1e3e5", badge: "#8c9196", bar: "#8c9196" },
-  pro:      { bg: "#f0faf6", border: "#b5e4d8", badge: "#008060", bar: "#008060" },
+  pro:      { bg: "#f0faf6", border: "#b5e4d8", badge: "var(--p-color-primary, #FD4A52)", bar: "var(--p-color-primary, #008060)" },
   business: { bg: "#f4f0ff", border: "#d3bfff", badge: "#6514d2", bar: "#6514d2" },
 };
 

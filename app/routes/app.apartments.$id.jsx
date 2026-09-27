@@ -847,8 +847,8 @@ function ApartmentEditForm() {
                 title="View Live Product"
                 style={{
                   display:"flex", alignItems:"center", gap:6,
-                  padding:"6px 12px", borderRadius:6, border:"1px solid #008060",
-                  color:"#008060", fontSize:12, fontWeight:500, textDecoration:"none",
+                  padding:"6px 12px", borderRadius:6, border:"1px solid var(--p-color-primary, #FD4A52)",
+                  color:"var(--p-color-primary, #FD4A52)", fontSize:12, fontWeight:500, textDecoration:"none",
                   background:"#fff", flexShrink:0,
                 }}
               >
@@ -881,11 +881,11 @@ function ApartmentEditForm() {
                       padding: "14px 12px",
                       textAlign: "center",
                       cursor: "pointer",
-                      border: `2px solid ${isActive ? "#008060" : "#e1e3e5"}`,
+                      border: `2px solid ${isActive ? "var(--p-color-primary, #008060)" : "#e1e3e5"}`,
                       borderRadius: 12,
-                      background: isActive ? "#e6f7f1" : "#fff",
+                      background: isActive ? "var(--p-color-primary-light, #e6f7f1)" : "#fff",
                       transition: "all 0.15s",
-                      boxShadow: isActive ? "0 0 0 3px #00806022" : "none",
+                      boxShadow: isActive ? "0 0 0 3px var(--p-color-primary-transparent, var(--p-color-primary, #008060)22)" : "none",
                       position: "relative",
                     }}
                   >
@@ -893,14 +893,14 @@ function ApartmentEditForm() {
                       <span style={{
                         position: "absolute", top: 8, right: 8,
                         width: 18, height: 18, borderRadius: "50%",
-                        background: "#008060", display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "var(--p-color-primary, #008060)", display: "flex", alignItems: "center", justifyContent: "center",
                       }}>
                         <span style={{ width: 14, height: 14, display: "block", color: "#fff" }}>
                           <Icon source={CheckIcon} />
                         </span>
                       </span>
                     )}
-                    <div style={{ marginBottom: 6, display: "flex", justifyContent: "center", color: isActive ? "#008060" : "#5c5f62" }}>
+                    <div style={{ marginBottom: 6, display: "flex", justifyContent: "center", color: isActive ? "var(--p-color-primary, #008060)" : "#5c5f62" }}>
                       <span style={{ width: 24, height: 24, display: "block" }}>
                         <Icon source={lt.icon} />
                       </span>
@@ -916,9 +916,9 @@ function ApartmentEditForm() {
             <div style={{ fontSize:14, fontWeight:500, color:"#202223", marginBottom:10 }}>Booking Type</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12 }}>
               {[
-                { value:"single",   title:"Single",  icon:CalendarIcon,      desc:"One fixed date per booking.",                            color:"#e3f1fb", iconColor:"#008060" },
-                { value:"range",    title:"Range",   icon:CalendarTimeIcon,  desc:"Customer selects a date range (check-in → check-out).",  color:"#f0f4ff", iconColor:"#008060" },
-                { value:"multiple", title:"Multiple",icon:CalendarCheckIcon, desc:"Customer picks multiple individual dates.",               color:"#e6f7f1", iconColor:"#008060" },
+                { value:"single",   title:"Single",  icon:CalendarIcon,      desc:"One fixed date per booking.",                            color:"#e3f1fb", iconColor:"var(--p-color-primary, #008060)" },
+                { value:"range",    title:"Range",   icon:CalendarTimeIcon,  desc:"Customer selects a date range (check-in → check-out).",  color:"#f0f4ff", iconColor:"var(--p-color-primary, #008060)" },
+                { value:"multiple", title:"Multiple",icon:CalendarCheckIcon, desc:"Customer picks multiple individual dates.",               color:"var(--p-color-primary-light, #e6f7f1)", iconColor:"var(--p-color-primary, #008060)" },
               ].map(({ value, title, icon, desc, color, iconColor }) => {
                 const isActive = bookingType === value;
                 return (

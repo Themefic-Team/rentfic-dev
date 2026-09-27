@@ -255,8 +255,8 @@ export default function NewBookingPage() {
               {nights > 0 && (
                 <div style={{
                   marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6,
-                  padding: "4px 12px", background: "#e6f7f1", borderRadius: 20,
-                  fontSize: 13, fontWeight: 600, color: "#008060",
+                  padding: "4px 12px", background: "var(--p-color-primary-light, #e6f7f1)", borderRadius: 20,
+                  fontSize: 13, fontWeight: 600, color: "var(--p-color-primary, #FD4A52)",
                 }}>
                   🌙 {nights} night{nights !== 1 ? "s" : ""}
                 </div>
@@ -453,7 +453,7 @@ function ToggleRow({ label, hint, enabled, disabled: isDisabled, onChange }) {
         onClick={() => !isDisabled && onChange(!enabled)}
         style={{
           width: 42, height: 24, borderRadius: 12, border: "none",
-          background: (!isDisabled && enabled) ? "#008060" : "#e1e3e5",
+          background: (!isDisabled && enabled) ? "var(--p-color-primary, #008060)" : "#e1e3e5",
           cursor: isDisabled ? "default" : "pointer",
           position: "relative", flexShrink: 0, transition: "background 0.2s",
         }}

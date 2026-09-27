@@ -302,7 +302,7 @@ export default function ApartmentsIndexPage() {
                 type="checkbox"
                 checked={allOnPageSelected}
                 onChange={toggleSelectAll}
-                style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#008060" }}
+                style={{ width: 16, height: 16, cursor: "pointer", accentColor: "var(--p-color-primary, #FD4A52)" }}
               />
               <span style={{ fontSize: "14px", color: "#202223", fontWeight: 500 }}>
                 {filtered.length} Rental{filtered.length !== 1 ? "s" : ""}
@@ -379,7 +379,7 @@ export default function ApartmentsIndexPage() {
                       return next;
                     })
                   }
-                  style={{ width: 16, height: 16, cursor: "pointer", flexShrink: 0, accentColor: "#008060" }}
+                  style={{ width: 16, height: 16, cursor: "pointer", flexShrink: 0, accentColor: "var(--p-color-primary, #008060)" }}
                 />
 
                 {/* Thumbnail */}
@@ -466,8 +466,8 @@ export default function ApartmentsIndexPage() {
                           alignItems: "center",
                           justifyContent: "center",
                           textDecoration: "none",
-                          color: "#008060",
-                          border: "1px solid #008060",
+                          color: "var(--p-color-primary, #008060)",
+                          border: "1px solid var(--p-color-primary, #008060)",
                         }}
                       >
                         <Icon source={ExternalIcon} />
@@ -646,7 +646,7 @@ const emptyStyle = {
 const createBtnStyle = {
   marginTop: "8px",
   padding: "10px 20px",
-  background: "#008060",
+  background: "var(--p-color-primary, #008060)",
   color: "#fff",
   border: "none",
   borderRadius: "8px",

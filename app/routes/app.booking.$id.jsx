@@ -662,7 +662,7 @@ export default function BookingDetail() {
                 onClick={handleEdit}
                 disabled={isSaving}
                 style={{
-                  flex: 1, padding: "11px 0", background: "#008060", color: "#fff",
+                  flex: 1, padding: "11px 0", background: "var(--p-color-primary, #FD4A52)", color: "#fff",
                   border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600,
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                   cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.7 : 1,

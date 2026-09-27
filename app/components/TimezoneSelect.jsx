@@ -161,7 +161,7 @@ export function TimezoneSelect({ value, onChange }) {
                     padding: "8px 14px",
                     fontSize: "14px",
                     cursor: "pointer",
-                    color: isSelected ? "#008060" : "#202223",
+                    color: isSelected ? "var(--p-color-primary, #FD4A52)" : "#202223",
                     fontWeight: isSelected ? 600 : 400,
                     background: isSelected
                       ? "#f0faf6"
@@ -175,7 +175,7 @@ export function TimezoneSelect({ value, onChange }) {
                 >
                   <span>{tz}</span>
                   {isSelected && (
-                    <span style={{ fontSize: "12px", color: "#008060" }}>✓</span>
+                    <span style={{ fontSize: "12px", color: "var(--p-color-primary, #008060)" }}>✓</span>
                   )}
                 </div>
               );

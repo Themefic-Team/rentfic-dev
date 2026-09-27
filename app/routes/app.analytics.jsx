@@ -177,7 +177,7 @@ export const loader = async ({ request }) => {
 
 // ─── Pure SVG Bar Chart ───────────────────────────────────────────────────────
 
-function BarChart({ data, height = 200, color = "#008060", color2 = "#e1e3e5" }) {
+function BarChart({ data, height = 200, color = "var(--p-color-primary, #FD4A52)", color2 = "#e1e3e5" }) {
   if (!data.length) return null;
   const maxVal = Math.max(...data.map((d) => d.revenue), 1);
   const barW   = Math.max(14, Math.floor(560 / data.length) - 8);
@@ -270,7 +270,7 @@ function DonutChart({ segments, size = 140 }) {
 
 // ─── Mini sparkline ──────────────────────────────────────────────────────────
 
-function Sparkline({ data, color = "#008060", height = 36, width = 100 }) {
+function Sparkline({ data, color = "var(--p-color-primary, #008060)", height = 36, width = 100 }) {
   if (!data.length) return null;
   const maxV = Math.max(...data, 1);
   const pts  = data.map((v, i) => {
@@ -287,7 +287,7 @@ function Sparkline({ data, color = "#008060", height = 36, width = 100 }) {
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
-function KPICard({ label, value, sub, sparkData, color = "#008060", trend }) {
+function KPICard({ label, value, sub, sparkData, color = "var(--p-color-primary, #008060)", trend }) {
   return (
     <div style={{
       padding: "16px 18px", border: "1px solid #e1e3e5", borderRadius: 10,
@@ -300,7 +300,7 @@ function KPICard({ label, value, sub, sparkData, color = "#008060", trend }) {
       </div>
       {sub && <div style={{ fontSize: 12, color: "#6d7175" }}>{sub}</div>}
       {trend !== undefined && (
-        <div style={{ fontSize: 12, fontWeight: 600, color: trend >= 0 ? "#008060" : "#d82c0d" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: trend >= 0 ? "var(--p-color-primary, #008060)" : "#d82c0d" }}>
           {trend >= 0 ? "▲" : "▼"} {Math.abs(trend)}% vs last month
         </div>
       )}
@@ -311,12 +311,12 @@ function KPICard({ label, value, sub, sparkData, color = "#008060", trend }) {
 // ─── Horizontal Bar (Occupancy) ───────────────────────────────────────────────
 
 function OccupancyBar({ name, rate, bookedDays }) {
-  const color = rate >= 80 ? "#008060" : rate >= 50 ? "#f59e0b" : "#e1e3e5";
+  const color = rate >= 80 ? "var(--p-color-primary, #008060)" : rate >= 50 ? "#f59e0b" : "#e1e3e5";
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
         <span style={{ fontSize: 13, color: "#202223", fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 10 }}>{name}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: rate >= 80 ? "#008060" : rate >= 50 ? "#856404" : "#6d7175", flexShrink: 0 }}>{rate}%</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: rate >= 80 ? "var(--p-color-primary, #008060)" : rate >= 50 ? "#856404" : "#6d7175", flexShrink: 0 }}>{rate}%</span>
       </div>
       <div style={{ height: 8, background: "#f1f2f3", borderRadius: 4, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${rate}%`, background: color, borderRadius: 4, transition: "width 0.6s ease" }} />
@@ -336,7 +336,7 @@ export default function AnalyticsPage() {
     new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 0 }).format(v);
 
   const statusSegments = [
-    { label: "Confirmed", value: statusBreakdown.confirmed, color: "#008060" },
+    { label: "Confirmed", value: statusBreakdown.confirmed, color: "var(--p-color-primary, #008060)" },
     { label: "Completed", value: statusBreakdown.completed, color: "#6d7175" },
     { label: "Pending",   value: statusBreakdown.pending,   color: "#f59e0b" },
     { label: "Cancelled", value: statusBreakdown.cancelled, color: "#d82c0d" },
@@ -368,10 +368,10 @@ export default function AnalyticsPage() {
               padding: "8px 16px",
               fontSize: 14,
               fontWeight: activeTab === t.key ? 700 : 400,
-              color: activeTab === t.key ? "#008060" : "#6d7175",
+              color: activeTab === t.key ? "var(--p-color-primary, #008060)" : "#6d7175",
               background: "transparent",
               border: "none",
-              borderBottom: activeTab === t.key ? "2px solid #008060" : "2px solid transparent",
+              borderBottom: activeTab === t.key ? "2px solid var(--p-color-primary, #008060)" : "2px solid transparent",
               cursor: "pointer",
               marginBottom: -1,
               transition: "all 0.15s",
@@ -392,7 +392,7 @@ export default function AnalyticsPage() {
                 label="Revenue This Month"
                 value={fmtCurrency(kpis.revenueThisMonth)}
                 sparkData={sparkRevenue}
-                color="#008060"
+                color="var(--p-color-primary, #008060)"
               />
               <KPICard
                 label="New Bookings"
@@ -417,7 +417,7 @@ export default function AnalyticsPage() {
           <s-section heading="All Time">
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
               <KPICard label="Total Bookings" value={kpis.totalBookings} color="#202223" />
-              <KPICard label="Total Revenue"  value={fmtCurrency(kpis.totalRevenue)} color="#008060" />
+              <KPICard label="Total Revenue"  value={fmtCurrency(kpis.totalRevenue)} color="var(--p-color-primary, #008060)" />
             </div>
           </s-section>
 
@@ -456,7 +456,7 @@ export default function AnalyticsPage() {
                         <div style={{ fontSize: 13, fontWeight: 600, color: "#202223", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{apt.name}</div>
                         <div style={{ fontSize: 11, color: "#6d7175" }}>{apt.bookings} bookings · {apt.nights} nights</div>
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#008060", flexShrink: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--p-color-primary, #008060)", flexShrink: 0 }}>
                         {fmtCurrency(apt.revenue)}
                       </div>
                     </div>
@@ -477,7 +477,7 @@ export default function AnalyticsPage() {
             </div>
           ) : (
             <>
-              <BarChart data={revenueByMonth} height={200} color="#008060" />
+              <BarChart data={revenueByMonth} height={200} color="var(--p-color-primary, #008060)" />
               <div style={{ marginTop: 20, border: "1px solid #e1e3e5", borderRadius: 8, overflow: "hidden" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -491,7 +491,7 @@ export default function AnalyticsPage() {
                     {[...revenueByMonth].reverse().map((m, i) => (
                       <tr key={i} style={{ borderBottom: "1px solid #f1f2f3" }}>
                         <td style={tdStyle}>{m.label}</td>
-                        <td style={{ ...tdStyle, fontWeight: 600, color: m.revenue > 0 ? "#008060" : "#8c9196" }}>
+                        <td style={{ ...tdStyle, fontWeight: 600, color: m.revenue > 0 ? "var(--p-color-primary, #008060)" : "#8c9196" }}>
                           {m.revenue > 0 ? fmtCurrency(m.revenue) : "-"}
                         </td>
                         <td style={tdStyle}>{m.bookings}</td>
@@ -557,8 +557,8 @@ export default function AnalyticsPage() {
           {occupancy.length > 0 && (
             <div style={{ display: "flex", gap: 24, marginTop: 24, padding: "12px 16px", background: "#f6f6f7", borderRadius: 8 }}>
               <div style={{ fontSize: 13 }}>
-                <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#008060", marginRight: 6 }} />
-                <strong style={{ color: "#008060" }}>≥80%</strong> High occupancy
+                <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "var(--p-color-primary, #008060)", marginRight: 6 }} />
+                <strong style={{ color: "var(--p-color-primary, #008060)" }}>≥80%</strong> High occupancy
               </div>
               <div style={{ fontSize: 13 }}>
                 <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#f59e0b", marginRight: 6 }} />
@@ -604,7 +604,7 @@ export default function AnalyticsPage() {
                       <td style={{ ...tdStyle, fontWeight: 600 }}>{apt.name}</td>
                       <td style={tdStyle}>{apt.bookings}</td>
                       <td style={tdStyle}>{apt.nights}</td>
-                      <td style={{ ...tdStyle, fontWeight: 700, color: "#008060" }}>{fmtCurrency(apt.revenue)}</td>
+                      <td style={{ ...tdStyle, fontWeight: 700, color: "var(--p-color-primary, #008060)" }}>{fmtCurrency(apt.revenue)}</td>
                       <td style={tdStyle}>
                         {apt.bookings > 0 ? fmtCurrency(apt.revenue / apt.bookings) : "-"}
                       </td>

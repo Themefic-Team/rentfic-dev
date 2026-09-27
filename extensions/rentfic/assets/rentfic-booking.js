@@ -278,7 +278,7 @@
     container.dataset.productId   = productId;
     container.dataset.currency    = embed.dataset.currency    || 'USD';
     container.dataset.moneyFormat = embed.dataset.moneyFormat || '{{amount}}';
-    container.dataset.primaryColor = embed.dataset.primaryColor || '#008060';
+    container.dataset.primaryColor = embed.dataset.primaryColor || '#FD4A52';
     container.dataset.buttonText            = embed.dataset.buttonText            || 'Reserve Now';
     container.dataset.moneyWithCurrencyFormat = embed.dataset.moneyWithCurrencyFormat || embed.dataset.moneyFormat || '{{amount}}';
     var hasAppointment = embed.dataset.hasAppointment === 'true';
@@ -323,7 +323,7 @@
       this.currency     = container.dataset.currency     || 'USD';
       this.moneyFmt             = container.dataset.moneyFormat             || '{{amount}}';
       this.moneyWithCurrencyFmt = container.dataset.moneyWithCurrencyFormat || this.moneyFmt;
-      this.primaryColor         = container.dataset.primaryColor             || '#008060';
+      this.primaryColor         = container.dataset.primaryColor             || '#ff8400';
       this.buttonText   = container.dataset.buttonText   || 'Reserve Now';
 
       this.apartment    = null;

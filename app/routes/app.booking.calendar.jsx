@@ -231,7 +231,7 @@ export default function BookingCalendar() {
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontSize: 12, fontWeight: isToday ? 700 : 500,
                         color: isToday ? "#fff" : "#202223",
-                        background: isToday ? "#008060" : "transparent",
+                        background: isToday ? "var(--p-color-primary, #FD4A52)" : "transparent",
                         marginBottom: 4,
                       }}>
                         {dayNum}
