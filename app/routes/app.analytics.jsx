@@ -371,7 +371,7 @@ export default function AnalyticsPage() {
               color: activeTab === t.key ? "var(--p-color-primary, #008060)" : "#6d7175",
               background: "transparent",
               border: "none",
-              borderBottom: activeTab === t.key ? "2px solid var(--p-color-primary, #008060)" : "2px solid transparent",
+              borderBottom: activeTab === t.key ? "1px solid var(--p-color-primary, #008060)" : "2px solid transparent",
               cursor: "pointer",
               marginBottom: -1,
               transition: "all 0.15s",

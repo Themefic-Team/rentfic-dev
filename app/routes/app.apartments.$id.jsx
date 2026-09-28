@@ -881,11 +881,10 @@ function ApartmentEditForm() {
                       padding: "14px 12px",
                       textAlign: "center",
                       cursor: "pointer",
-                      border: `2px solid ${isActive ? "var(--p-color-primary, #008060)" : "#e1e3e5"}`,
+                      border: `1px solid ${isActive ? "var(--p-color-primary, #008060)" : "#e1e3e5"}`,
                       borderRadius: 12,
                       background: isActive ? "var(--p-color-primary-light, #e6f7f1)" : "#fff",
                       transition: "all 0.15s",
-                      boxShadow: isActive ? "0 0 0 3px var(--p-color-primary-transparent, var(--p-color-primary, #008060)22)" : "none",
                       position: "relative",
                     }}
                   >
@@ -916,8 +915,8 @@ function ApartmentEditForm() {
             <div style={{ fontSize:14, fontWeight:500, color:"#202223", marginBottom:10 }}>Booking Type</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12 }}>
               {[
-                { value:"single",   title:"Single",  icon:CalendarIcon,      desc:"One fixed date per booking.",                            color:"#e3f1fb", iconColor:"var(--p-color-primary, #008060)" },
-                { value:"range",    title:"Range",   icon:CalendarTimeIcon,  desc:"Customer selects a date range (check-in → check-out).",  color:"#f0f4ff", iconColor:"var(--p-color-primary, #008060)" },
+                { value:"single",   title:"Single",  icon:CalendarIcon,      desc:"One fixed date per booking.",                            color:"var(--p-color-primary-light, #e6f7f1)", iconColor:"var(--p-color-primary, #008060)" },
+                { value:"range",    title:"Range",   icon:CalendarTimeIcon,  desc:"Customer selects a date range (check-in → check-out).",  color:"var(--p-color-primary-light, #e6f7f1)", iconColor:"var(--p-color-primary, #008060)" },
                 { value:"multiple", title:"Multiple",icon:CalendarCheckIcon, desc:"Customer picks multiple individual dates.",               color:"var(--p-color-primary-light, #e6f7f1)", iconColor:"var(--p-color-primary, #008060)" },
               ].map(({ value, title, icon, desc, color, iconColor }) => {
                 const isActive = bookingType === value;

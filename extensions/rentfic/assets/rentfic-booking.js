@@ -780,8 +780,8 @@
     _syncPagePrice(price) {
       const formatted = this._fmtPriceWithCurrency(price);
       const selectors = [
-        '.price__regular .price-item--regular',
-        '.price-item.price-item--regular',
+        '.price-item--regular',
+        '.price-item--sale',
         '[data-product-price]',
         '.product__price .money',
         '.product-single__price .money',
@@ -792,6 +792,11 @@
           el.textContent = formatted;
         });
       }
+      
+      // Hide the sale formatting since the app is dynamically calculating the total price
+      document.querySelectorAll('.price').forEach(el => {
+        el.classList.remove('price--on-sale');
+      });
     }
 
     _renderInfoStrip() {
