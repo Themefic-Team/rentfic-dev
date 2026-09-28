@@ -2,7 +2,7 @@
 
 client_id = "f3d840993d3d3355cdf7b71d36f079f1"
 name = "Rentfic-qa"
-application_url = "https://rentfic-dev.onrender.com/"
+application_url = "https://rentfic.pixelfic.com/"
 embedded = true
 
 [build]
@@ -31,13 +31,13 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://rentfic-dev.onrender.com/auth/callback",
-  "https://rentfic-dev.onrender.com/auth/shopify/callback",
-  "https://rentfic-dev.onrender.com/api/auth/callback"
+  "https://rentfic.pixelfic.com/auth/callback",
+  "https://rentfic.pixelfic.com/auth/shopify/callback",
+  "https://rentfic.pixelfic.com/api/auth/callback"
 ]
 
 [app_proxy]
-url = "https://rentfic-dev.onrender.com/api/proxy"
+url = "https://rentfic.pixelfic.com/api/proxy"
 subpath = "rentfic"
 prefix = "apps"
 

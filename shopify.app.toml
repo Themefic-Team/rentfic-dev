@@ -2,7 +2,7 @@
 
 client_id = "c8f1c29e6603af52c05cd741a1be756f"
 name = "rentfic-dev"
-application_url = "https://rentfic-dev.onrender.com/"
+application_url = "https://rentfic.pixelfic.com/"
 embedded = true
 
 [build]
@@ -29,13 +29,13 @@ scopes = "read_orders,write_inventory,write_metaobject_definitions,write_metaobj
 
 [auth]
 redirect_urls = [
-  "https://rentfic-dev.onrender.com/auth/callback",
-  "https://rentfic-dev.onrender.com/auth/shopify/callback",
-  "https://rentfic-dev.onrender.com/api/auth/callback"
+  "https://rentfic.pixelfic.com/auth/callback",
+  "https://rentfic.pixelfic.com/auth/shopify/callback",
+  "https://rentfic.pixelfic.com/api/auth/callback"
 ]
 
 [app_proxy]
-url = "https://rentfic-dev.onrender.com/api/proxy"
+url = "https://rentfic.pixelfic.com/api/proxy"
 subpath = "rentfic"
 prefix = "apps"
 
