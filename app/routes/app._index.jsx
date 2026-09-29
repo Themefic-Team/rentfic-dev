@@ -1,4 +1,4 @@
-import { authenticate, apiVersion } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 import { useState, useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useRouteError, useLoaderData, useNavigate, useRevalidator } from "react-router";
@@ -57,52 +57,54 @@ export const loader = async ({ request }) => {
   const appPlan = shopRecord?.plan ?? "free";
   const limits  = getPlanLimits(appPlan);
   const listingLimit = limits.listings === Infinity ? null : limits.listings;
-
   const revenueThisMonth = revenueAgg._sum.totalPrice ?? 0;
 
   const avgNights = recentBookings.length
     ? (recentBookings.reduce((sum, b) => sum + (b.nights ?? 0), 0) / recentBookings.length).toFixed(1)
     : "0";
 
-  // Check if app embed is enabled
-  let isEmbedEnabled = false; // Default to false so it prompts activation if API check fails
+  // ── Check if Rentfic App Embed block is enabled in the active theme ──────────
+  let isEmbedEnabled = false;
   let embedCheckError = null;
   try {
-    const themeRes = await fetch(`https://${session.shop}/admin/api/${apiVersion}/themes.json`, {
-      headers: { "X-Shopify-Access-Token": session.accessToken }
-    });
-    
-    if (!themeRes.ok) {
-      throw new Error(`Failed to fetch themes: ${themeRes.statusText}`);
+    // Step 1: Get the list of themes to find the active (main) one
+    const themesRes = await fetch(
+      `https://${shop}/admin/api/2024-10/themes.json`,
+      { headers: { "X-Shopify-Access-Token": session.accessToken } }
+    );
+
+    if (!themesRes.ok) {
+      throw new Error(`themes API responded ${themesRes.status} ${themesRes.statusText}`);
     }
-    const themesData = await themeRes.json();
-    const mainTheme = themesData?.themes?.find(t => t.role === "main");
-    
+
+    const { themes } = await themesRes.json();
+    const mainTheme = themes?.find((t) => t.role === "main");
+
     if (mainTheme) {
-      const assetRes = await fetch(`https://${session.shop}/admin/api/${apiVersion}/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`, {
-        headers: { "X-Shopify-Access-Token": session.accessToken }
-      });
-      
-      if (!assetRes.ok) {
-        throw new Error(`Failed to fetch assets: ${assetRes.statusText}`);
-      }
-      const assetJson = await assetRes.json();
-      const content = assetJson?.asset?.value;
-      if (content) {
-        const settingsData = JSON.parse(content);
-        if (settingsData?.current?.blocks) {
-          isEmbedEnabled = Object.values(settingsData.current.blocks).some(
-            (b) => b.type && b.type.includes("app_embed") && !b.disabled
+      // Step 2: Read the theme's settings_data.json to see which app-embed blocks are on
+      const assetRes = await fetch(
+        `https://${shop}/admin/api/2024-10/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
+        { headers: { "X-Shopify-Access-Token": session.accessToken } }
+      );
+
+      if (assetRes.ok) {
+        const assetJson = await assetRes.json();
+        const raw = assetJson?.asset?.value;
+        if (raw) {
+          const settingsData = JSON.parse(raw);
+          // app-embed blocks live under current.blocks (object keyed by UUID)
+          const blocks = settingsData?.current?.blocks ?? {};
+          isEmbedEnabled = Object.values(blocks).some(
+            (b) => typeof b.type === "string" && b.type.includes("app_embed") && b.disabled !== true
           );
-        } else {
-          isEmbedEnabled = false;
         }
       }
     }
   } catch (err) {
-    console.error("Theme embed check failed:", err.stack || err);
-    embedCheckError = "Could not check theme settings. Please restart your dev server and grant the required permissions.";
+    console.error("[Dashboard] embed check error:", err.message);
+    embedCheckError = err.message;
   }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return {
     appPlan,
@@ -125,6 +127,8 @@ export const loader = async ({ request }) => {
   };
 };
 
+// No action needed — the button is just a link to the Theme Editor
+
 const STATUS_STYLE = {
   confirmed: { background: "#d4edda", color: "#155724" },
   completed: { background: "#e2e3e5", color: "#383d41" },
@@ -138,64 +142,73 @@ export default function DashboardPage() {
   const { stats, recentBookings, isEmbedEnabled, embedCheckError, shopifyApiKey, shop, ...planData } = useLoaderData();
   const navigate = useNavigate();
   const { revalidate } = useRevalidator();
-  const [isChecking, setIsChecking] = useState(false);
+
+  // After user opens the Theme Editor and clicks "Enable App Embed", 
+  // poll the loader every 4s until isEmbedEnabled flips to true.
+  const [isPolling, setIsPolling] = useState(false);
+
+  // Start polling as soon as the user clicks the activate button
+  const handleActivateClick = () => setIsPolling(true);
 
   useEffect(() => {
-    let interval;
-    if (isChecking && !isEmbedEnabled && !embedCheckError) {
-      interval = setInterval(() => {
-        revalidate();
-      }, 3000);
-    } else if (isEmbedEnabled || embedCheckError) {
-      setIsChecking(false);
-      if (interval) clearInterval(interval);
+    if (!isPolling) return;
+    if (isEmbedEnabled) {
+      setIsPolling(false);
+      return;
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isChecking, isEmbedEnabled, embedCheckError, revalidate]);
+    const id = setInterval(() => revalidate(), 4000);
+    return () => clearInterval(id);
+  }, [isPolling, isEmbedEnabled, revalidate]);
 
   const overviewStats = [
     { label: "Total Bookings",      value: stats.totalBookings },
     { label: "Active Rentals",       value: stats.activeApartments },
-    { label: "Revenue This Month",   value: `$${Number(stats.revenueThisMonth).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` },
+    { label: "Revenue This Month",   value: `$${Number(stats.revenueThisMonth || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` },
     { label: "Avg. Duration / Stay", value: `${stats.avgNights} nights` },
   ];
 
-  const activateEmbedUrl = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${shopifyApiKey}/app_embed`;
+  // Deep-link that opens the Theme Editor directly on the App Embeds tab
+  // and highlights the Rentfic embed block so the merchant can toggle it on.
+  const themeEditorUrl = shopifyApiKey
+    ? `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${shopifyApiKey}/app_embed`
+    : `https://${shop}/admin/themes`;
 
   return (
     <s-page heading="Dashboard">
-      <div style={{ marginBottom: "24px" }}>
+
+      {/* ── App Embed Status Banner ─────────────────────────────────────────── */}
+      <div style={{ marginBottom: "20px" }}>
         {!isEmbedEnabled ? (
           <Banner
             title="Enable the Rentfic App Embed"
-            tone="critical"
+            tone="warning"
             action={{
-              content: isChecking ? 'Waiting for save...' : 'Activate App Embed',
-              url: activateEmbedUrl,
+              content: isPolling ? "Waiting for you to save…" : "Enable App Embed",
+              url: themeEditorUrl,
               external: true,
-              loading: isChecking,
-              onAction: () => setIsChecking(true)
+              onAction: handleActivateClick,
             }}
           >
-            <p style={{ marginBottom: embedCheckError ? "8px" : 0 }}>
-              The booking widget is not currently enabled on your storefront. You must activate the App Embed block in your Theme Editor so customers can book your rentals.
+            <p>
+              The Rentfic booking widget is not active on your storefront yet.
+              Click <strong>Enable App Embed</strong> to open the Theme Editor,
+              toggle the Rentfic switch ON, then hit <strong>Save</strong>.
+              This notice will disappear automatically once it is enabled.
             </p>
             {embedCheckError && (
-              <p style={{ color: "#d72c0d", fontWeight: "600", fontSize: "13px", marginTop: "8px" }}>
-                Error: {embedCheckError}
+              <p style={{ marginTop: 8, color: "#d72c0d", fontSize: 13, fontWeight: 600 }}>
+                Check error: {embedCheckError}
               </p>
             )}
           </Banner>
         ) : (
-          <Banner 
-            title="Theme App Extension is enabled and active!" 
+          <Banner
+            title="Rentfic App Embed is enabled and active!"
             tone="success"
             action={{
-              content: 'Manage in Theme Editor',
-              url: activateEmbedUrl,
-              external: true
+              content: "Manage in Theme Editor",
+              url: themeEditorUrl,
+              external: true,
             }}
           />
         )}

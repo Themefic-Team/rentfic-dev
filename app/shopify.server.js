@@ -19,32 +19,40 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   billing: {
     Pro: {
-      amount: 19,
-      currencyCode: "USD",
-      interval: BillingInterval.Every30Days,
+      lineItems: [{
+        amount: 19,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      }],
       trialDays: 7,
     },
     "Pro Yearly": {
-      amount: 182,         // 19 * 12 * 0.8 = 182.4 → 182
-      currencyCode: "USD",
-      interval: BillingInterval.Annual,
+      lineItems: [{
+        amount: 182,         // 19 * 12 * 0.8 = 182.4 → 182
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
+      }],
       trialDays: 7,
     },
     Business: {
-      amount: 49,
-      currencyCode: "USD",
-      interval: BillingInterval.Every30Days,
+      lineItems: [{
+        amount: 49,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      }],
       trialDays: 7,
     },
     "Business Yearly": {
-      amount: 470,         // 49 * 12 * 0.8 = 470.4 → 470
-      currencyCode: "USD",
-      interval: BillingInterval.Annual,
+      lineItems: [{
+        amount: 470,         // 49 * 12 * 0.8 = 470.4 → 470
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
+      }],
       trialDays: 7,
     },
   },
   future: {
-    expiringOfflineAccessTokens: false,
+    expiringOfflineAccessTokens: true,
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }

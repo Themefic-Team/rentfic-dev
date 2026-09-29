@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { useLoaderData, useSubmit, useNavigation } from "react-router";
-import { redirect } from "react-router";
+import { useLoaderData, useNavigation, Form, redirect } from "react-router";
 import { Icon } from "@shopify/polaris";
 import { StarIcon, CheckSmallIcon, XSmallIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
@@ -184,30 +183,27 @@ export const action = async ({ request }) => {
 
   const url             = new URL(request.url);
   const returnUrl       = `${url.origin}/app/subscribtion`;
-  const { confirmationUrl } = await billing.request({
-    plan:   shopifyPlanName,
-    isTest: true,
-    returnUrl,
-  });
-  return redirect(confirmationUrl);
+  try {
+    const { confirmationUrl } = await billing.request({
+      plan:   shopifyPlanName,
+      isTest: true,
+      returnUrl,
+    });
+    return redirect(confirmationUrl);
+  } catch (e) {
+    console.error("Billing Error from Shopify:", e, e.errorData);
+    throw new Error(`Shopify Billing Error: ${JSON.stringify(e.errorData || e.message)}`);
+  }
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SubscriptionPage() {
   const { currentPlan, apartmentCount, apartmentLimit, invoices } = useLoaderData();
-  const submit      = useSubmit();
   const navigation  = useNavigation();
   const [billing, setBilling] = useState("monthly");
 
   const isSubmitting = navigation.state === "submitting";
-
-  function handleUpgrade(planKey) {
-    const fd = new FormData();
-    fd.append("plan", planKey);           // e.g. "pro" | "business"
-    fd.append("billing_period", billing); // "monthly" | "yearly"
-    submit(fd, { method: "POST" });
-  }
 
   const limits = apartmentLimit === Infinity ? "Unlimited" : apartmentLimit;
   const usedPct = apartmentLimit === Infinity ? 0 : Math.min(100, (apartmentCount / apartmentLimit) * 100);
@@ -445,28 +441,32 @@ export default function SubscriptionPage() {
                     </span>
                   </div>
                 ) : (
-                  <button
-                    disabled={isSubmitting}
-                    onClick={() => plan.price > 0 ? handleUpgrade(planKey) : undefined}
-                    style={{
-                      padding: "10px",
-                      background: plan.badge ? "#2c6ecb" : "#202223",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 8,
-                      fontSize: 14,
-                      fontWeight: 600,
-                      cursor: isSubmitting ? "not-allowed" : "pointer",
-                      opacity: isSubmitting ? 0.7 : 1,
-                      width: "100%",
-                    }}
-                  >
-                    {isSubmitting
-                      ? "Redirecting…"
-                      : plan.price === 0
-                        ? "Downgrade to Free"
-                        : `Upgrade to ${plan.name}${billing === "yearly" ? " (Yearly)" : ""}`}
-                  </button>
+                  <Form method="post">
+                    <input type="hidden" name="plan" value={planKey} />
+                    <input type="hidden" name="billing_period" value={billing} />
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      style={{
+                        padding: "10px",
+                        background: plan.badge ? "#2c6ecb" : "#202223",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 8,
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: isSubmitting ? "not-allowed" : "pointer",
+                        opacity: isSubmitting ? 0.7 : 1,
+                        width: "100%",
+                      }}
+                    >
+                      {isSubmitting
+                        ? "Redirecting…"
+                        : plan.price === 0
+                          ? "Downgrade to Free"
+                          : `Upgrade to ${plan.name}${billing === "yearly" ? " (Yearly)" : ""}`}
+                    </button>
+                  </Form>
                 )}
               </div>
             );

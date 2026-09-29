@@ -261,7 +261,7 @@
   // ─── Boot ────────────────────────────────────────────────────────────────────
   function boot() {
     const embed = document.getElementById('rentfic-app-embed');
-    if (!embed || embed.dataset.enabled === 'false') return;
+    if (!embed) return;
 
     const match = window.location.pathname.match(/\/products\/([^/?#]+)/);
     if (!match) return;
