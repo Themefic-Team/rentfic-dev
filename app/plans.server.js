@@ -1,7 +1,7 @@
 export const PLAN_LIMITS = {
-  free:     { listings: 1,        analytics: false },
-  pro:      { listings: Infinity, analytics: false },
-  business: { listings: Infinity, analytics: true  },
+  free:     { listings: 1,        analytics: false, customEmail: true  },
+  pro:      { listings: Infinity, analytics: false, customEmail: true  },
+  business: { listings: Infinity, analytics: true,  customEmail: true  },
 };
 
 export const BILLING_PLANS = {

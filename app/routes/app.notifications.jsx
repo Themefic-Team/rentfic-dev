@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
+import { useLoaderData, useSubmit, useNavigation, useActionData, useRouteLoaderData } from "react-router";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import { Icon } from "@shopify/polaris";
 import { SettingsIcon } from "@shopify/polaris-icons";
@@ -99,6 +99,9 @@ export default function NotificationsPage() {
   const submit       = useSubmit();
   const navigation   = useNavigation();
   const shopify      = useAppBridge();
+  
+  const routeData = useRouteLoaderData("routes/app");
+  const { customEmail } = routeData?.limits || { customEmail: true };
 
   const isSaving = navigation.state === "submitting";
 
@@ -222,7 +225,7 @@ export default function NotificationsPage() {
         <button onClick={handleDiscard}>Discard</button>
       </SaveBar>
 
-      <s-page heading="Notifications">
+      <s-page fullWidth  heading="Notifications">
         <s-button slot="primary-action" onClick={handleSave} loading={isSaving}>
           Save
         </s-button>
@@ -234,6 +237,13 @@ export default function NotificationsPage() {
             Customise the emails sent to guests and yourself at each stage of a
             booking. Click a tab to edit that template.
           </s-paragraph>
+
+          {!customEmail ? (
+            <div style={{ marginTop: 16 }}>
+              <PlanCard plan={routeData?.appPlan} feature="Custom email templates" upgradeUrl="/app/subscribtion" />
+            </div>
+          ) : (
+            <>
 
           {/* ── Main Tab Switcher (Admin vs Guest) ── */}
           <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
@@ -499,8 +509,10 @@ export default function NotificationsPage() {
               >
                 Send {TABS.find((t) => t.key === activeTab)?.label}
               </s-button>
+              </div>
             </div>
-          </div>
+            </>
+          )}
         </s-section>
 
         {/* ── Email delivery ────────────────────────────────────────── */}
@@ -509,6 +521,13 @@ export default function NotificationsPage() {
             Choose how notification emails are sent. SMTP gives you full control
             over deliverability and sender identity.
           </s-paragraph>
+
+          {!customEmail ? (
+            <div style={{ marginTop: 16 }}>
+              <PlanCard plan={routeData?.appPlan} feature="Custom SMTP email delivery" upgradeUrl="/app/subscribtion" />
+            </div>
+          ) : (
+            <>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
@@ -651,6 +670,8 @@ export default function NotificationsPage() {
               check the server console for the preview URL.
             </div>
           )}
+          </>
+          )}
         </s-section>
       </s-page>
     </>
@@ -670,3 +691,5 @@ const inputStyle = {
   width: "100%",
   boxSizing: "border-box",
 };
+
+// Cache invalidation trigger

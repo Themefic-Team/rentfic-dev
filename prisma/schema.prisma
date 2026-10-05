@@ -56,6 +56,7 @@ model Apartment {
   settings     Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  bookings     Booking[]
 
   @@index([shop])
 }
@@ -64,6 +65,7 @@ model Booking {
   id                  String   @id @default(cuid())
   shop                String
   apartmentId         String
+  apartment           Apartment @relation(fields: [apartmentId], references: [id])
   productId           String
   productTitle        String
   orderId             String?

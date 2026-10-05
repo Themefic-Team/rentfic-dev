@@ -26,7 +26,7 @@ export default function Auth() {
 
   return (
     <AppProvider embedded={false}>
-      <s-page>
+      <s-page fullWidth >
         <Form method="post">
           <s-section heading="Log in">
             <s-text-field

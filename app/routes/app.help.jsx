@@ -1,6 +1,6 @@
 export default function HelpPage() {
   return (
-    <s-page heading="Help & Documentation">
+    <s-page fullWidth  heading="Help & Documentation">
       <s-section heading="Quick Start Guide">
         <s-paragraph>
           Welcome to Rentfic! To get started:

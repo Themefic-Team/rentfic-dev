@@ -361,7 +361,7 @@ export default function BookingDetail() {
   const checkOutRelative = relativeDate(booking.checkOut);
 
   return (
-    <s-page heading="Booking Details">
+    <s-page fullWidth  heading="Booking Details">
       {/* ── Header Bar ────────────────────────────────────────────────────── */}
       <div style={{
         display: "flex", justifyContent: "space-between", alignItems: "center",

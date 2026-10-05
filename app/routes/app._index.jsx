@@ -174,7 +174,7 @@ export default function DashboardPage() {
     : `https://${shop}/admin/themes`;
 
   return (
-    <s-page heading="Dashboard">
+    <s-page fullWidth  heading="Dashboard">
 
       {/* ── App Embed Status Banner ─────────────────────────────────────────── */}
       <div style={{ marginBottom: "20px" }}>

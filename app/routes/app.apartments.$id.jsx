@@ -745,7 +745,7 @@ function ApartmentEditForm() {
 
   if (limitReached) {
     return (
-      <s-page heading="Add Rental">
+      <s-page fullWidth  heading="Add Rental">
         <s-section>
           <div style={{ padding: "24px 20px", background: "#fff4f4", border: "1px solid #fead9a", borderRadius: 8 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#202223", marginBottom: 8 }}>
@@ -801,7 +801,7 @@ function ApartmentEditForm() {
         <button onClick={handleDiscard}>Discard</button>
       </SaveBar>
 
-      <s-page heading={isNew ? "Add Rental" : `Edit: ${apartment.name}`}>
+      <s-page fullWidth  heading={isNew ? "Add Rental" : `Edit: ${apartment.name}`}>
 
         {!isNew && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>

@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -101,17 +101,25 @@ export default function BookingCalendar() {
   const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
 
   const cells = [];
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
   for (let i = 0; i < totalCells; i++) {
     const dayNum = i - firstDay + 1;
-    cells.push(dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null);
+    if (dayNum < 1) {
+      cells.push({ dayNum: daysInPrevMonth + dayNum, isCurrentMonth: false, monthOffset: -1 });
+    } else if (dayNum > daysInMonth) {
+      cells.push({ dayNum: dayNum - daysInMonth, isCurrentMonth: false, monthOffset: 1 });
+    } else {
+      cells.push({ dayNum, isCurrentMonth: true, monthOffset: 0 });
+    }
   }
 
   const toStr = (y, m, d) =>
     `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
-  function getBookingsForDay(dayNum) {
-    if (!dayNum) return [];
-    const dateStr = toStr(year, month, dayNum);
+  function getBookingsForDay(cell) {
+    const targetDate = new Date(year, month + cell.monthOffset, cell.dayNum);
+    const dateStr = toStr(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    
     return bookings.filter((b) => {
       const start = b.startDate ?? "";
       const end   = b.endDate   ?? b.startDate ?? "";
@@ -126,13 +134,13 @@ export default function BookingCalendar() {
   const nextParam = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
 
   return (
-    <s-page heading="Bookings - Calendar View">
+    <s-page fullWidth  heading="Bookings - Calendar View">
 
       {/* View toggle + New Booking */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ display: "flex", background: "#f6f6f7", border: "1px solid #e1e3e5", borderRadius: 8, padding: 3, gap: 2 }}>
-          <a
-            href="/app/booking"
+          <Link
+            to="/app/booking"
             style={{
               padding: "6px 16px", borderRadius: 6, fontSize: 13, fontWeight: 500,
               background: "transparent", color: "#6d7175", border: "1px solid transparent",
@@ -140,7 +148,7 @@ export default function BookingCalendar() {
             }}
           >
             ☰ List
-          </a>
+          </Link>
           <span
             style={{
               padding: "6px 16px", borderRadius: 6, fontSize: 13, fontWeight: 600,
@@ -152,8 +160,8 @@ export default function BookingCalendar() {
           </span>
         </div>
 
-        <a
-          href="/app/booking/new"
+        <Link
+          to="/app/booking/new"
           style={{
             display: "inline-flex", alignItems: "center", gap: 6,
             padding: "9px 18px", background: "#202223", color: "#fff",
@@ -162,7 +170,7 @@ export default function BookingCalendar() {
           }}
         >
           + New Booking
-        </a>
+        </Link>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 20, alignItems: "start" }}>
@@ -175,21 +183,29 @@ export default function BookingCalendar() {
             display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "14px 20px", borderBottom: "1px solid #e1e3e5", background: "#f9fafb",
           }}>
-            <a
-              href={`/app/booking/calendar?month=${prevParam}`}
+            <Link
+              to={`/app/booking/calendar?month=${prevParam}`}
               style={{ padding: "6px 14px", border: "1px solid #e1e3e5", borderRadius: 6, fontSize: 13, color: "#202223", textDecoration: "none", background: "#fff", fontWeight: 500 }}
             >
               ← Prev
-            </a>
+            </Link>
             <span style={{ fontSize: 17, fontWeight: 700, color: "#202223" }}>
               {MONTH_NAMES[month]} {year}
             </span>
-            <a
-              href={`/app/booking/calendar?month=${nextParam}`}
-              style={{ padding: "6px 14px", border: "1px solid #e1e3e5", borderRadius: 6, fontSize: 13, color: "#202223", textDecoration: "none", background: "#fff", fontWeight: 500 }}
-            >
-              Next →
-            </a>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Link
+                to={`/app/booking/calendar?month=${nextParam}`}
+                style={{ padding: "6px 14px", border: "1px solid #e1e3e5", borderRadius: 6, fontSize: 13, color: "#202223", textDecoration: "none", background: "#fff", fontWeight: 500 }}
+              >
+                Next →
+              </Link>
+              <Link
+                to={`/app/booking/calendar`}
+                style={{ padding: "6px 14px", border: "1px solid #e1e3e5", borderRadius: 6, fontSize: 13, color: "#202223", textDecoration: "none", background: "#fff", fontWeight: 500 }}
+              >
+                Today
+              </Link>
+            </div>
           </div>
 
           {/* Day-of-week header */}
@@ -206,11 +222,12 @@ export default function BookingCalendar() {
 
           {/* Grid cells */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
-            {cells.map((dayNum, idx) => {
-              const dateStr     = dayNum ? toStr(year, month, dayNum) : null;
-              const isToday     = dateStr === todayStr;
-              const dayBookings = getBookingsForDay(dayNum);
-              const isWeekend   = idx % 7 === 0 || idx % 7 === 6;
+            {cells.map((cell, idx) => {
+              const targetDate = new Date(year, month + cell.monthOffset, cell.dayNum);
+              const dateStr = toStr(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+              const isToday = dateStr === todayStr;
+              const dayBookings = getBookingsForDay(cell);
+              const isWeekend = idx % 7 === 0 || idx % 7 === 6;
 
               return (
                 <div
@@ -220,25 +237,23 @@ export default function BookingCalendar() {
                     borderRight:  (idx + 1) % 7 === 0 ? "none" : "1px solid #f1f2f3",
                     borderBottom: idx < totalCells - 7   ? "1px solid #f1f2f3" : "none",
                     padding: "6px 4px 4px",
-                    background: !dayNum ? "#fafafa" : isWeekend ? "#fafafa" : "#fff",
+                    background: !cell.isCurrentMonth ? "#fafafa" : isWeekend ? "#fcfcfc" : "#fff",
                   }}
                 >
-                  {dayNum && (
-                    <>
-                      {/* Day number circle */}
-                      <div style={{
-                        width: 24, height: 24, borderRadius: "50%",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 12, fontWeight: isToday ? 700 : 500,
-                        color: isToday ? "#fff" : "#202223",
-                        background: isToday ? "var(--p-color-primary, #FD4A52)" : "transparent",
-                        marginBottom: 4,
-                      }}>
-                        {dayNum}
-                      </div>
+                  {/* Day number circle */}
+                  <div style={{
+                    width: 24, height: 24, borderRadius: "50%",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, fontWeight: isToday ? 700 : 500,
+                    color: isToday ? "#fff" : (!cell.isCurrentMonth ? "#a1a1aa" : "#202223"),
+                    background: isToday ? "var(--p-color-primary, #FD4A52)" : "transparent",
+                    marginBottom: 4,
+                  }}>
+                    {cell.dayNum}
+                  </div>
 
-                      {/* Booking bars */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {/* Booking bars */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, opacity: cell.isCurrentMonth ? 1 : 0.6 }}>
                         {dayBookings.slice(0, 3).map((b) => {
                           const color = colorMap[b.apartmentId] ?? PALETTE[0];
                           return (
@@ -266,9 +281,7 @@ export default function BookingCalendar() {
                             +{dayBookings.length - 3} more
                           </div>
                         )}
-                      </div>
-                    </>
-                  )}
+                  </div>
                 </div>
               );
             })}

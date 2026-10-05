@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLoaderData, useActionData, useNavigation, useNavigate } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, Link } from "react-router";
 import { redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -154,7 +154,7 @@ export default function NewBookingPage() {
   };
 
   return (
-    <s-page heading="New Manual Booking">
+    <s-page fullWidth  heading="New Manual Booking">
       {/* Back */}
       <div style={{ marginBottom: 20 }}>
         <button
@@ -182,7 +182,7 @@ export default function NewBookingPage() {
           padding: "24px", background: "#fff8e1", border: "1px solid #ffe082",
           borderRadius: 8, marginBottom: 20, fontSize: 14, color: "#856404",
         }}>
-          No active apartments found. <a href="/app/apartments" style={{ color: "#005bd3" }}>Create an apartment first →</a>
+          No active apartments found. <Link to="/app/apartments" style={{ color: "#005bd3" }}>Create an apartment first →</Link>
         </div>
       )}
 

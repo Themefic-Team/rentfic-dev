@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLoaderData, useFetcher, useNavigate } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { PlanCard } from "../components/PlanCard";
@@ -385,6 +385,7 @@ export default function BookingPage() {
   const [search,       setSearch]       = useState("");
   const [tab,          setTab]          = useState("all");
   const [futureOnly,   setFutureOnly]   = useState(false);
+  const [dateRange,    setDateRange]    = useState("all_time");
   const [page,         setPage]         = useState(1);
   const [manageOpen,   setManageOpen]   = useState(null); // bookingId
   const [selected,     setSelected]     = useState(new Set());
@@ -404,7 +405,32 @@ export default function BookingPage() {
       tab === "complete"  ? isComplete(b.status) :
       tab === "cancelled" ? b.status === "cancelled" : true;
     const matchFuture = !futureOnly || (b.checkIn && b.checkIn >= today);
-    return matchSearch && matchTab && matchFuture;
+    
+    let matchDateRange = true;
+    if (dateRange !== "all_time" && b.checkIn) {
+      const todayObj = new Date();
+      todayObj.setHours(0, 0, 0, 0);
+      
+      const [y, m, d] = b.checkIn.split("-").map(Number);
+      const bDate = new Date(y, m - 1, d);
+      
+      if (dateRange === "today") {
+        matchDateRange = b.checkIn === today;
+      } else if (dateRange === "last_7_days") {
+        const past = new Date(todayObj); past.setDate(todayObj.getDate() - 7);
+        matchDateRange = bDate >= past && bDate <= todayObj;
+      } else if (dateRange === "last_30_days") {
+        const past = new Date(todayObj); past.setDate(todayObj.getDate() - 30);
+        matchDateRange = bDate >= past && bDate <= todayObj;
+      } else if (dateRange === "this_month") {
+        matchDateRange = bDate.getFullYear() === todayObj.getFullYear() && bDate.getMonth() === todayObj.getMonth();
+      } else if (dateRange === "next_30_days") {
+        const future = new Date(todayObj); future.setDate(todayObj.getDate() + 30);
+        matchDateRange = bDate >= todayObj && bDate <= future;
+      }
+    }
+    
+    return matchSearch && matchTab && matchFuture && matchDateRange;
   });
 
   const counts = {
@@ -447,6 +473,46 @@ export default function BookingPage() {
 
   const syncResult = fetcher.data?.syncResult;
 
+  const handleExportCsv = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch("/api/export/bookings?format=csv");
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rentfic-bookings-${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      window.shopify?.toast?.show("Export failed");
+    }
+  };
+
+  const handleExportIcal = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch("/api/export/ical/all");
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "rentfic-bookings.ics";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      window.shopify?.toast?.show("Export failed");
+    }
+  };
+
   const handleRowClick = (bookingId, e) => {
     // Don't navigate if clicking checkbox, button, or manage dropdown
     if (
@@ -458,7 +524,7 @@ export default function BookingPage() {
   };
 
   return (
-    <s-page heading="Bookings">
+    <s-page fullWidth  heading="Bookings" fullWidth={true} full-width="true" inline-size="max">
       <PlanCard />
 
       {/* View toggle + New Booking button */}
@@ -474,8 +540,8 @@ export default function BookingPage() {
           >
             <Icon source={ListBulletedIcon} /> List
           </span>
-          <a
-            href="/app/booking/calendar"
+          <Link
+            to="/app/booking/calendar"
             style={{
               padding: "6px 16px", borderRadius: 6, fontSize: 13, fontWeight: 500,
               background: "transparent", color: "#6d7175", border: "1px solid transparent",
@@ -483,36 +549,34 @@ export default function BookingPage() {
             }}
           >
             <Icon source={CalendarIcon} /> Calendar
-          </a>
+          </Link>
         </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
-          <a
-            href="/api/export/bookings?format=csv"
-            download
+          <button
+            onClick={handleExportCsv}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: "9px 18px", background: "#fff", color: "#202223", border: "1px solid #c9cccf",
               borderRadius: 8, fontSize: 14, fontWeight: 600,
-              textDecoration: "none", whiteSpace: "nowrap",
+              textDecoration: "none", whiteSpace: "nowrap", cursor: "pointer"
             }}
           >
             <Icon source={ExportIcon} /> Export CSV
-          </a>
-          <a
-            href="/api/export/ical/all"
-            download
+          </button>
+          <button
+            onClick={handleExportIcal}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: "9px 18px", background: "#fff", color: "#202223", border: "1px solid #c9cccf",
               borderRadius: 8, fontSize: 14, fontWeight: 600,
-              textDecoration: "none", whiteSpace: "nowrap",
+              textDecoration: "none", whiteSpace: "nowrap", cursor: "pointer"
             }}
           >
             <Icon source={CalendarIcon} /> Export iCal
-          </a>
-          <a
-            href="/app/booking/new"
+          </button>
+          <Link
+            to="/app/booking/new"
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: "9px 18px", background: "#303030", color: "#fff", border: "none",
@@ -521,7 +585,7 @@ export default function BookingPage() {
             }}
           >
             <Icon source={PlusIcon} tone="inherit" /> New Booking
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -586,14 +650,32 @@ export default function BookingPage() {
             Future Bookings
           </button>
 
-          {/* All Time label */}
+          {/* Date Range Filter */}
           <div style={{
             display: "flex", alignItems: "center", gap: 6,
-            padding: "9px 16px", border: "1px solid #c9cccf", borderRadius: 8,
-            fontSize: 13, color: "#6d7175", background: "#fff",
+            padding: "0 12px", border: "1px solid #c9cccf", borderRadius: 8,
+            fontSize: 13, color: "#202223", background: "#fff",
+            position: "relative"
           }}>
             <Icon source={CalendarIcon} />
-            All Time
+            <select
+              value={dateRange}
+              onChange={(e) => { setDateRange(e.target.value); setPage(1); }}
+              style={{
+                border: "none", background: "transparent", fontSize: 13, color: "#202223", fontWeight: 500,
+                padding: "9px 0", outline: "none", cursor: "pointer", appearance: "none", paddingRight: 20
+              }}
+            >
+              <option value="all_time">All Time</option>
+              <option value="today">Today</option>
+              <option value="last_7_days">Last 7 Days</option>
+              <option value="last_30_days">Last 30 Days</option>
+              <option value="this_month">This Month</option>
+              <option value="next_30_days">Next 30 Days</option>
+            </select>
+            <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", width: 14 }}>
+              <Icon source={ChevronDownIcon} />
+            </span>
           </div>
         </div>
 

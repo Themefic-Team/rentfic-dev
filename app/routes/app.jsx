@@ -79,6 +79,7 @@ export const loader = async ({ request }) => {
     appPlan,
     listingCount,
     listingLimit,
+    limits,
     renewalDate,
   };
 };
@@ -89,10 +90,31 @@ export default function App() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <style>{`
-        :root {
+        :root, s-page {
           --p-color-primary: #FD4A52;
           --p-color-primary-light: #F4D9DA;
           --p-color-primary-transparent: #FD4A5255;
+          
+          /* Override Polaris Web Component max-width constraints */
+          --pc-page-max-width: none !important;
+          --p-page-max-width: none !important;
+          --pc-page-large-max-width: none !important;
+          --pc-page-base-max-width: none !important;
+          --pc-frame-max-width: none !important;
+          --pc-page-layout-max-width: none !important;
+          --pc-box-max-width: none !important;
+        }
+
+        s-page::part(page),
+        s-page::part(container),
+        s-page::part(layout) {
+          max-width: none !important;
+        }
+
+        s-page, .Polaris-Page {
+          max-width: 100% !important;
+          padding-left: 20px;
+          padding-right: 20px;
         }
       `}</style>
       <PolarisProvider i18n={enTranslations}>

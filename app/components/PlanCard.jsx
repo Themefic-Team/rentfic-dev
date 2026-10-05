@@ -1,4 +1,4 @@
-import { useRouteLoaderData } from "react-router";
+import { useRouteLoaderData, Link } from "react-router";
 import { Icon } from "@shopify/polaris";
 import { AlertTriangleIcon } from "@shopify/polaris-icons";
 import { ClipboardCheckFilledIcon, ChevronRightIcon  } from "@shopify/polaris-icons";
@@ -14,15 +14,17 @@ export function PlanCard({ data: dataProp }) {
   const data = dataProp ?? routeData;
   if (!data) return null; 
 
-  const { appPlan, apartmentCount, apartmentLimit, renewalDate } = data;
+  const { appPlan, renewalDate } = data;
+  const count = data.apartmentCount ?? data.listingCount ?? 0;
+  const limitValue = data.apartmentLimit ?? data.listingLimit ?? null;
   const planKey  = (appPlan ?? "free").toLowerCase();
   const style    = PLAN_STYLE[planKey] ?? PLAN_STYLE.free;
   const planName = planKey === "pro" ? "Pro" : planKey === "business" ? "Business" : "Free";
   const isPaid   = planKey !== "free";
 
-  const limit    = (apartmentLimit === Infinity || apartmentLimit === null) ? null : apartmentLimit;
-  const usedPct  = limit ? Math.min(100, (apartmentCount / limit) * 100) : 0;
-  const atLimit  = limit !== null && apartmentCount >= limit;
+  const limit    = (limitValue === Infinity || limitValue === null) ? null : limitValue;
+  const usedPct  = limit ? Math.min(100, (count / limit) * 100) : 0;
+  const atLimit  = limit !== null && count >= limit;
 
   let renewalText = null;
   if (isPaid && renewalDate) {
@@ -83,7 +85,7 @@ export function PlanCard({ data: dataProp }) {
                 fontWeight: atLimit ? 600 : 400,
               }}
             >
-              {apartmentCount} of {limit} apartment{limit === 1 ? "" : "s"} used
+              {count} of {limit} Rental Booking{limit === 1 ? "" : "s"} used
             </span>
             <div
               style={{
@@ -110,7 +112,7 @@ export function PlanCard({ data: dataProp }) {
         {/* Unlimited note (paid plan) */}
         {limit === null && (
           <span style={{ fontSize: 13, color: "#6d7175" }}>
-            {apartmentCount} apartment{apartmentCount !== 1 ? "s" : ""} · Unlimited
+            {count} Rental Booking{count !== 1 ? "s" : ""} · Unlimited
           </span>
         )}
 
@@ -123,8 +125,8 @@ export function PlanCard({ data: dataProp }) {
       </div>
 
       {/* Right: link */}
-      <a
-        href="/app/subscribtion"
+      <Link
+        to="/app/subscribtion"
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -141,7 +143,7 @@ export function PlanCard({ data: dataProp }) {
         }}
       >
         {isPaid ? <>Manage <Icon source={ChevronRightIcon } tone="inherit" /></> : atLimit ? <>Upgrade to add more <Icon source={ChevronRightIcon } tone="inherit" /></> : <>Upgrade plan <Icon source={ChevronRightIcon } tone="inherit" /></>}
-      </a>
+      </Link>
     </div>
   );
 }

@@ -176,7 +176,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <s-page heading="Settings">
+    <s-page fullWidth  heading="Settings">
       <SaveBar open={isDirty}>
         <button variant="primary" onClick={handleSave} loading={isSaving ? "" : undefined}>
           Save

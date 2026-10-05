@@ -15,11 +15,11 @@ const PLANS = [
     badge: null,
     description: "Get started with basic rental management.",
     features: [
-      { text: "1 apartment",                   included: true  },
+      { text: "1 Rental Booking",               included: true  },
       { text: "Booking calendar",               included: true  },
-      { text: "Email notifications",            included: true  },
+      { text: "Basic email notifications",      included: true  },
       { text: "Custom notification templates",  included: true  },
-      { text: "SMTP email delivery",            included: true  },
+      { text: "Custom SMTP email delivery",     included: true  },
       { text: "Analytics & reports",            included: false },
       { text: "Priority support",               included: false },
     ],
@@ -32,11 +32,11 @@ const PLANS = [
     badge: "Most Popular",
     description: "Everything you need to run a professional rental business.",
     features: [
-      { text: "Unlimited apartments",           included: true  },
+      { text: "Unlimited Rental Bookings",              included: true  },
       { text: "Booking calendar",               included: true  },
-      { text: "Email notifications",            included: true  },
+      { text: "Advanced email notifications",   included: true  },
       { text: "Custom notification templates",  included: true  },
-      { text: "SMTP email delivery",            included: true  },
+      { text: "Custom SMTP email delivery",     included: true  },
       { text: "Analytics & reports",            included: false },
       { text: "Priority support",               included: false },
     ],
@@ -49,11 +49,11 @@ const PLANS = [
     badge: null,
     description: "Advanced features for high-volume rental operations.",
     features: [
-      { text: "Unlimited apartments",           included: true  },
+      { text: "Unlimited Rental Bookings",              included: true  },
       { text: "Booking calendar",               included: true  },
-      { text: "Email notifications",            included: true  },
+      { text: "Advanced email notifications",   included: true  },
       { text: "Custom notification templates",  included: true  },
-      { text: "SMTP email delivery",            included: true  },
+      { text: "Custom SMTP email delivery",     included: true  },
       { text: "Analytics & reports",            included: true  },
       { text: "Priority support",               included: true  },
     ],
@@ -151,7 +151,7 @@ export const loader = async ({ request }) => {
 // ─── Action ──────────────────────────────────────────────────────────────────
 
 export const action = async ({ request }) => {
-  const { billing } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const plan           = formData.get("plan");           // "pro" | "business"
   const billing_period = formData.get("billing_period"); // "monthly" | "yearly"
@@ -159,11 +159,29 @@ export const action = async ({ request }) => {
 
   if (intent === "cancel") {
     try {
-      await billing.cancel({
+      const { appSubscriptions } = await billing.check({
+        plans: ["Pro", "Pro Yearly", "Business", "Business Yearly"],
         isTest: true,
-        prorate: false,
       });
-    } catch (_) {}
+
+      if (appSubscriptions?.length > 0) {
+        await billing.cancel({
+          subscriptionId: appSubscriptions[0].id,
+          isTest: true,
+          prorate: false,
+        });
+      }
+
+      // Optimistically update the local DB so the UI reflects the downgrade immediately
+      // before the webhook arrives.
+      await prisma.shop.upsert({
+        where: { shop: session.shop },
+        update: { plan: "free" },
+        create: { shop: session.shop, plan: "free" },
+      });
+    } catch (e) {
+      console.error("[Rentfic] Failed to cancel subscription:", e);
+    }
     return redirect("/app/subscribtion");
   }
 
@@ -184,15 +202,25 @@ export const action = async ({ request }) => {
   const url             = new URL(request.url);
   const returnUrl       = `${url.origin}/app/subscribtion`;
   try {
-    const { confirmationUrl } = await billing.request({
+    const response = await billing.request({
       plan:   shopifyPlanName,
       isTest: true,
       returnUrl,
     });
-    return redirect(confirmationUrl);
+    
+    // Fallback if the adapter returns rather than throws the redirect
+    if (response instanceof Response) {
+      return response;
+    }
+    
+    return redirect(response.confirmationUrl || returnUrl);
   } catch (e) {
+    if (e instanceof Response) {
+      // Shopify's billing API throws a redirect Response
+      throw e;
+    }
     console.error("Billing Error from Shopify:", e, e.errorData);
-    throw new Error(`Shopify Billing Error: ${JSON.stringify(e.errorData || e.message)}`);
+    throw new Error(`Shopify Billing Error: ${e.message || JSON.stringify(e)}`);
   }
 };
 
@@ -210,7 +238,7 @@ export default function SubscriptionPage() {
   const planLabel = PLANS.find(p => p.key === currentPlan)?.name ?? "Free";
 
   return (
-    <s-page heading="Subscription">
+    <s-page fullWidth  heading="Subscription">
 
       {/* Current plan banner */}
       <s-section heading="Current Plan">
@@ -248,7 +276,7 @@ export default function SubscriptionPage() {
                 {planLabel} Plan
               </div>
               <div style={{ fontSize: 13, color: "#6d7175", marginTop: 2 }}>
-                {apartmentCount} of {limits} apartment{limits !== 1 ? "s" : ""} used
+                {apartmentCount} of {limits} Rental Booking{limits !== 1 ? "s" : ""} used
               </div>
             </div>
           </div>
@@ -442,8 +470,14 @@ export default function SubscriptionPage() {
                   </div>
                 ) : (
                   <Form method="post">
-                    <input type="hidden" name="plan" value={planKey} />
-                    <input type="hidden" name="billing_period" value={billing} />
+                    {planKey === "free" ? (
+                      <input type="hidden" name="intent" value="cancel" />
+                    ) : (
+                      <>
+                        <input type="hidden" name="plan" value={planKey} />
+                        <input type="hidden" name="billing_period" value={billing} />
+                      </>
+                    )}
                     <button
                       type="submit"
                       disabled={isSubmitting}
@@ -494,7 +528,7 @@ export default function SubscriptionPage() {
             </thead>
             <tbody>
               {[
-                { label: "Apartments",             values: ["1",   "Unlimited", "Unlimited"] },
+                { label: "Rental Bookings",             values: ["1",   "Unlimited", "Unlimited"] },
                 { label: "Booking calendar",        values: [true,  true,       true        ] },
                 { label: "Email notifications",     values: [true,  true,       true        ] },
                 { label: "Notification templates",  values: [true,  true,       true        ] },
@@ -624,8 +658,8 @@ export default function SubscriptionPage() {
             a: "All paid plans include a 7-day free trial. No credit card is required to start the trial.",
           },
           {
-            q: "What happens if I exceed my apartment limit on the free plan?",
-            a: "You will not be able to create new apartments until you either upgrade your plan or remove an existing apartment.",
+            q: "What happens if I exceed my rental booking limit on the free plan?",
+            a: "You will not be able to create new rental bookings until you either upgrade your plan or remove an existing rental booking.",
           },
           {
             q: "Can I switch between monthly and yearly billing?",

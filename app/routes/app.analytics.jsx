@@ -356,7 +356,7 @@ export default function AnalyticsPage() {
   ];
 
   return (
-    <s-page heading="Analytics">
+    <s-page fullWidth  heading="Analytics">
 
       {/* ── Tab Bar ── */}
       <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid #e1e3e5", paddingBottom: 0 }}>

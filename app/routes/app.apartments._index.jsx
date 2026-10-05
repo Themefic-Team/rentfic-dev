@@ -248,7 +248,7 @@ export default function ApartmentsIndexPage() {
 
   if (apartments.length === 0) {
     return (
-      <s-page heading="Rentals">
+      <s-page fullWidth  heading="Rentals">
         <s-button slot="primary-action" onClick={handleCreate} disabled={atLimit ? "" : undefined}>
           {atLimit ? "Plan Limit Reached" : "Add Rental"}
         </s-button>
@@ -276,7 +276,7 @@ export default function ApartmentsIndexPage() {
   }
 
   return (
-    <s-page heading="Rentals">
+    <s-page fullWidth  heading="Rentals">
       <s-button slot="primary-action" onClick={handleCreate}>
         Add Rental
       </s-button>
