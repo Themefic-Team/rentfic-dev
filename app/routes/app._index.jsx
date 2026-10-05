@@ -67,27 +67,39 @@ export const loader = async ({ request }) => {
   let isEmbedEnabled = false;
   let embedCheckError = null;
   try {
-    // Step 1: Get the list of themes to find the active (main) one
-    const themesRes = await fetch(
-      `https://${shop}/admin/api/2024-10/themes.json`,
-      { headers: { "X-Shopify-Access-Token": session.accessToken } }
-    );
-
-    if (!themesRes.ok) {
-      throw new Error(`themes API responded ${themesRes.status} ${themesRes.statusText}`);
-    }
-
-    const { themes } = await themesRes.json();
-    const mainTheme = themes?.find((t) => t.role === "main");
+    // Use the GraphQL Admin API via the authenticated admin client
+    // (avoids raw REST token issues on stores that installed before read_themes scope)
+    const themesRes = await admin.graphql(`
+      query {
+        themes(first: 20) {
+          nodes {
+            id
+            name
+            role
+          }
+        }
+      }
+    `);
+    const themesJson = await themesRes.json();
+    const themes = themesJson?.data?.themes?.nodes ?? [];
+    const mainTheme = themes.find((t) => t.role === "MAIN");
 
     if (mainTheme) {
-      // Step 2: Read the theme's settings_data.json to see which app-embed blocks are on
+      // Extract numeric theme ID from GID (e.g. "gid://shopify/Theme/123456789")
+      const themeNumericId = mainTheme.id.split("/").pop();
+
+      // Fetch the settings_data.json asset via REST (requires read_themes scope)
+      // If the store hasn't granted this scope yet, we skip silently
       const assetRes = await fetch(
-        `https://${shop}/admin/api/2024-10/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
+        `https://${shop}/admin/api/2024-10/themes/${themeNumericId}/assets.json?asset[key]=config/settings_data.json`,
         { headers: { "X-Shopify-Access-Token": session.accessToken } }
       );
 
-      if (assetRes.ok) {
+      if (assetRes.status === 403) {
+        // Store hasn't granted read_themes scope yet — hide the banner gracefully
+        embedCheckError = null;
+        isEmbedEnabled = true; // treat as enabled so the warning banner doesn't show
+      } else if (assetRes.ok) {
         const assetJson = await assetRes.json();
         const raw = assetJson?.asset?.value;
         if (raw) {
@@ -102,7 +114,9 @@ export const loader = async ({ request }) => {
     }
   } catch (err) {
     console.error("[Dashboard] embed check error:", err.message);
-    embedCheckError = err.message;
+    // On any unexpected error, hide the banner rather than showing a red error
+    isEmbedEnabled = true;
+    embedCheckError = null;
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
