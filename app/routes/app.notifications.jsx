@@ -439,42 +439,44 @@ export default function NotificationsPage() {
             />
           </div>
 
-          {/* Group mails + when to remind */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <label
-              style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}
-            >
-              <input
-                type="checkbox"
-                checked={tpl.groupMails}
-                onChange={(e) => setTpl("groupMails", e.target.checked)}
-                style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--p-color-primary, #008060)", cursor: "pointer", flexShrink: 0 }}
-              />
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>Group emails for same order</div>
-                <div style={{ fontSize: 13, color: "#6d7175", marginTop: 2 }}>
-                  Combines multiple reminders for the same order and dates into one email.
-                </div>
-              </div>
-            </label>
-
-            <div style={fieldWrap}>
-              <label style={labelStyle}>When to remind</label>
-              <select
-                value={tpl.whenToRemind}
-                onChange={(e) => setTpl("whenToRemind", e.target.value)}
-                style={{ ...inputStyle, maxWidth: 320 }}
+          {/* Group mails + when to remind (Only for Booking Reminder) */}
+          {activeTab === "bookingReminder" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <label
+                style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}
               >
-                <option value="disabled">Disabled</option>
-                <option value="immediately">Immediately</option>
-                <option value="1h">1 hour before</option>
-                <option value="3h">3 hours before</option>
-                <option value="12h">12 hours before</option>
-                <option value="24h">24 hours before</option>
-                <option value="48h">48 hours before</option>
-              </select>
+                <input
+                  type="checkbox"
+                  checked={tpl.groupMails}
+                  onChange={(e) => setTpl("groupMails", e.target.checked)}
+                  style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--p-color-primary, #008060)", cursor: "pointer", flexShrink: 0 }}
+                />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>Group emails for same order</div>
+                  <div style={{ fontSize: 13, color: "#6d7175", marginTop: 2 }}>
+                    Combines multiple reminders for the same order and dates into one email.
+                  </div>
+                </div>
+              </label>
+
+              <div style={fieldWrap}>
+                <label style={labelStyle}>When to remind</label>
+                <select
+                  value={tpl.whenToRemind}
+                  onChange={(e) => setTpl("whenToRemind", e.target.value)}
+                  style={{ ...inputStyle, maxWidth: 320 }}
+                >
+                  <option value="disabled">Disabled</option>
+                  <option value="immediately">Immediately</option>
+                  <option value="1h">1 hour before</option>
+                  <option value="3h">3 hours before</option>
+                  <option value="12h">12 hours before</option>
+                  <option value="24h">24 hours before</option>
+                  <option value="48h">48 hours before</option>
+                </select>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Divider */}
           <div style={{ borderTop: "1px solid #e1e3e5", margin: "20px 0" }} />
