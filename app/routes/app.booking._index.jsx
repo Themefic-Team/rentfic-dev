@@ -524,7 +524,7 @@ export default function BookingPage() {
   };
 
   return (
-    <s-page fullWidth  heading="Bookings" fullWidth={true} full-width="true" inline-size="max">
+    <s-page fullWidth heading="Bookings" full-width="true" inline-size="max">
       <PlanCard />
 
       {/* View toggle + New Booking button */}

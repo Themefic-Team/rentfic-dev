@@ -59,95 +59,7 @@ async function updateVariantPriceByGid(variantGid, price, endpoint, headers) {
   });
 }
 
-// Get or create the shop's dedicated "Deposit" product; returns the variant GID
-async function getOrCreateDepositVariant(shop, endpoint, headers) {
-  const shopRec = await prisma.shop.findUnique({ where: { shop } });
-  const existingGid = shopRec?.settings?.depositVariantGid;
-
-  if (existingGid) {
-    const chk = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ query: `{ node(id: "${existingGid}") { id } }` }),
-    });
-    const chkJson = await chk.json();
-    if (chkJson?.data?.node?.id) return existingGid;
-  }
-
-  // Create a new "Deposit" product with unlimited inventory
-  const createRes = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      query: `mutation {
-        productCreate(input: {
-          title: "Deposit"
-          status: ACTIVE
-          variants: [{ price: "0.00", inventoryPolicy: CONTINUE }]
-        }) {
-          product { variants(first: 1) { edges { node { id } } } }
-          userErrors { field message }
-        }
-      }`,
-    }),
-  });
-  const createJson = await createRes.json();
-  const variantGid = createJson?.data?.productCreate?.product?.variants?.edges?.[0]?.node?.id;
-
-  if (variantGid) {
-    const settings = { ...(shopRec?.settings || {}), depositVariantGid: variantGid };
-    await prisma.shop.upsert({
-      where:  { shop },
-      update: { settings },
-      create: { shop, settings },
-    });
-  }
-
-  return variantGid || null;
-}
-
-async function updateVariantPrice(shop, productGid, price) {
-  const sess = await prisma.session.findFirst({
-    where: { shop, isOnline: false },
-    orderBy: { expires: "desc" },
-  });
-  if (!sess?.accessToken) return;
-
-  const endpoint = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
-  const headers = {
-    "Content-Type": "application/json",
-    "X-Shopify-Access-Token": sess.accessToken,
-  };
-
-  const varRes = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      query: `{ product(id: "${productGid}") { variants(first:1) { edges { node { id } } } } }`,
-    }),
-  });
-  const varJson = await varRes.json();
-  const variantId = varJson?.data?.product?.variants?.edges?.[0]?.node?.id;
-  if (!variantId) return;
-
-  await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      query: `mutation BulkUpdatePrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-        productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-          productVariants { id price }
-          userErrors { field message }
-        }
-      }`,
-      variables: {
-        productId: productGid,
-        variants: [{ id: variantId, price: price.toFixed(2) }],
-      },
-    }),
-  });
-}
-
+// Moved Prisma-dependent functions inside the action function to prevent client build errors
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
@@ -267,6 +179,48 @@ export const action = async ({ request }) => {
     "Content-Type": "application/json",
     "X-Shopify-Access-Token": sess?.accessToken,
   };
+
+  async function updateVariantPrice(shop, productGid, price) {
+    const sess = await prisma.session.findFirst({
+      where: { shop, isOnline: false },
+      orderBy: { expires: "desc" },
+    });
+    if (!sess?.accessToken) return;
+
+    const endpoint = `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": sess.accessToken,
+    };
+
+    const varRes = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        query: `{ product(id: "${productGid}") { variants(first:1) { edges { node { id } } } } }`,
+      }),
+    });
+    const varJson = await varRes.json();
+    const variantId = varJson?.data?.product?.variants?.edges?.[0]?.node?.id;
+    if (!variantId) return;
+
+    await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        query: `mutation BulkUpdatePrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            productVariants { id price }
+            userErrors { field message }
+          }
+        }`,
+        variables: {
+          productId: productGid,
+          variants: [{ id: variantId, price: price.toFixed(2) }],
+        },
+      }),
+    });
+  }
 
   // Main booking variant -> deposit if exists, otherwise full total
   const chargeAmount = depositCharged !== null ? depositCharged : finalTotal;
