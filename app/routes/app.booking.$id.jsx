@@ -210,14 +210,14 @@ export const action = async ({ request, params }) => {
       "customer.lastName":  rest.join(" ") || "",
     };
 
-    // 1. Guest cancellation email
+    // 1. Customer cancellation email
     if (booking.customerEmail) {
       await sendNotification(
         session.shop,
         "bookingCancelled",
         vars,
         { to: booking.customerEmail }
-      ).catch((e) => console.error("[Rentfic] Guest cancel email failed:", e));
+      ).catch((e) => console.error("[Rentfic] Customer cancel email failed:", e));
     }
 
     // 2. Shop-owner cancellation alert
@@ -360,6 +360,10 @@ export default function BookingDetail() {
   const checkInRelative  = relativeDate(booking.checkIn);
   const checkOutRelative = relativeDate(booking.checkOut);
 
+  const durationName = ['car', 'equipment'].includes(booking.listingType?.toLowerCase()) ? 'day' : 'night';
+  const durationLabel = durationName.charAt(0).toUpperCase() + durationName.slice(1) + 's';
+  const unitLabel = booking.listingType ? booking.listingType.charAt(0).toUpperCase() + booking.listingType.slice(1) : 'Rental';
+
   return (
     <s-page fullWidth  heading="Booking Details">
       {/* ── Header Bar ────────────────────────────────────────────────────── */}
@@ -387,7 +391,7 @@ export default function BookingDetail() {
               </span>
             </div>
             <div style={{ fontSize: 13, color: "#6d7175", marginTop: 2 }}>
-              {booking.apartment} · {booking.nights} night{booking.nights !== 1 ? "s" : ""} · {booking.total}
+              {booking.apartment} · {booking.nights} {durationName}{booking.nights !== 1 ? "s" : ""} · {booking.total}
             </div>
           </div>
         </div>
@@ -480,7 +484,7 @@ export default function BookingDetail() {
                 {booking.id}
               </code>
             } />
-            <Row label="Apartment" value={
+            <Row label={unitLabel} value={
               <div>
                 <span style={{ fontWeight: 600 }}>{booking.apartment}</span>
                 <div style={{
@@ -547,7 +551,7 @@ export default function BookingDetail() {
                   />
                 </label>
                 <div style={{ fontSize: 13, color: "#6d7175" }}>
-                  Nights: <strong style={{ color: "#202223" }}>{calcNights}</strong>
+                  {durationLabel}: <strong style={{ color: "#202223" }}>{calcNights}</strong>
                 </div>
               </div>
             ) : (
@@ -572,11 +576,11 @@ export default function BookingDetail() {
                     )}
                   </span>
                 } />
-                <Row label="Nights" value={
+                <Row label={durationLabel} value={
                   <span style={{ fontWeight: 600, fontSize: 15 }}>{booking.nights}</span>
                 } />
                 {booking.pricePerNight != null && (
-                  <Row label="Rate / Night" value={fmtCurrency(booking.pricePerNight)} />
+                  <Row label={`Rate / ${durationName.charAt(0).toUpperCase() + durationName.slice(1)}`} value={fmtCurrency(booking.pricePerNight)} />
                 )}
                 {booking.dates && (
                   <Row label="Selected Dates" value={
@@ -591,13 +595,13 @@ export default function BookingDetail() {
             )}
           </div>
 
-          {/* ── Guest Information Card ── */}
+          {/* ── Customer Information Card ── */}
           <div style={card}>
-            <div style={cardHeading}>Guest Information</div>
+            <div style={cardHeading}>Customer Information</div>
             {editing ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 8 }}>
                 <label style={labelStyle}>
-                  Guest Name
+                  Customer Name
                   <input
                     type="text"
                     value={guestName}
@@ -607,7 +611,7 @@ export default function BookingDetail() {
                   />
                 </label>
                 <label style={labelStyle}>
-                  Guest Email
+                  Customer Email
                   <input
                     type="email"
                     value={guestEmail}

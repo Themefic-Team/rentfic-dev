@@ -576,3 +576,51 @@
   padding: 2px 6px;
   pointer-events: none;
 }
+
+/* ── Gallery ─────────────────────────────────────────────────── */
+.rf-gallery {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+  grid-auto-rows: 60px;
+}
+.rf-gallery-item {
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: zoom-in;
+  position: relative;
+  border: 1px solid var(--rf-border);
+}
+.rf-gallery-cover {
+  grid-column: span 4;
+  grid-row: span 3;
+}
+.rf-gallery-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+  display: block;
+}
+.rf-gallery-item:hover .rf-gallery-img {
+  transform: scale(1.05);
+}
+.rf-gallery-zoom {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 999999;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+  padding: 40px;
+}
+.rf-gallery-zoom .rf-gallery-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform: none !important;
+}
+

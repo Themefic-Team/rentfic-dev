@@ -12,7 +12,7 @@
  {% for metafield in product.metafields.rentfic %} 
     <p>{{ metafield.key }}: {{ metafield.value }}</p>
  {% endfor %}
-{% if app.metafields.rentfic.widget_enabled == "true" %}
+
   {% if request.page_type == 'product' and product.metafields.rentfic.is_apartment == 'true' %}
   <style>
     /* hide add-to-cart, sold-out, quantity, and payment buttons - NOT the price */
@@ -44,7 +44,7 @@
 
   {{ 'rentfic-booking.css' | asset_url | stylesheet_tag }}
   <script src="{{ 'rentfic-booking.js' | asset_url }}" defer></script>
-{% endif %}
+
 
 {% schema %}
 {

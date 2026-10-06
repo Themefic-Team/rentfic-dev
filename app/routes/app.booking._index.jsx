@@ -729,8 +729,8 @@ export default function BookingPage() {
         )}
 
         {/* ─── Data Table ─── */}
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ border: "1px solid #e1e3e5", borderRadius: 10, overflow: "hidden", background: "#fff", minWidth: 960 }}>
+        <div style={{ overflowX: "auto", width: "100%" }}>
+          <div style={{ border: "1px solid #e1e3e5", borderRadius: 10, overflow: "hidden", background: "#fff", width: "100%" }}>
             {/* Table Header */}
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
@@ -747,13 +747,11 @@ export default function BookingPage() {
                     />
                   </th>
                   <th style={thStyle}>Order</th>
-                  <th style={thStyle}>Guest</th>
-                  <th style={thStyle}>Apartment</th>
+                  <th style={thStyle}>Customer</th>
+                  <th style={thStyle}>Rental</th>
                   <th style={thStyle}>Check-in</th>
                   <th style={thStyle}>Check-out</th>
-                  <th style={{ ...thStyle, textAlign: "center" }}>Nights</th>
                   <th style={{ ...thStyle, textAlign: "right" }}>Total</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Deposit</th>
                   <th style={{ ...thStyle, textAlign: "center" }}>Status</th>
                   <th style={{ ...thStyle, textAlign: "center", width: 80 }}>Actions</th>
                 </tr>
@@ -797,15 +795,15 @@ export default function BookingPage() {
 
                         {/* Order */}
                         <td style={tdStyle}>
-                          <span style={{ fontWeight: 600, color: "#202223", fontSize: 13 }}>
+                          <span style={{ fontWeight: 600, color: "#202223", fontSize: 13, textDecoration: "underline" }} onClick={(e) => { e.stopPropagation(); if (b.shopifyOrderId) window.open(`shopify:admin/orders/${b.shopifyOrderId}`, '_blank'); }}>
                             {b.orderId}
                           </span>
                         </td>
 
-                        {/* Guest */}
+                        {/* Customer */}
                         <td style={tdStyle}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: "#202223", lineHeight: 1.3 }}>
-                            {b.guest}
+                            {b.guest && b.guest !== "-" ? b.guest : "Unknown Customer"}
                           </div>
                           {b.email && (
                             <div style={{ fontSize: 12, color: "#8c9196", lineHeight: 1.3, marginTop: 1 }}>
@@ -814,7 +812,7 @@ export default function BookingPage() {
                           )}
                         </td>
 
-                        {/* Apartment */}
+                        {/* Rental */}
                         <td style={{ ...tdStyle, color: "#6d7175", fontSize: 13 }}>
                           <div>{b.apartment}</div>
                           <div style={{ fontSize: 11, marginTop: 2, color: "#8c9196", textTransform: "capitalize" }}>
@@ -832,33 +830,9 @@ export default function BookingPage() {
                           {b.checkOutFmt}
                         </td>
 
-                        {/* Nights */}
-                        <td style={{ ...tdStyle, textAlign: "center", fontSize: 13 }}>
-                          {b.nights}
-                        </td>
-
                         {/* Total */}
                         <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, fontSize: 13 }}>
                           {b.total}
-                        </td>
-
-                        {/* Deposit */}
-                        <td style={{ ...tdStyle, textAlign: "right", fontSize: 12, color: "#6d7175" }}>
-                          {b.depositAmount ? (
-                            <div>
-                              <div style={{ color: "#155724", fontWeight: 500 }}>{b.depositAmount}</div>
-                              {b.balanceDue && (
-                                <div style={{ color: "#856404", fontSize: 11, marginTop: 1 }}>
-                                  Bal: {b.balanceDue}
-                                  {b.balanceStatus === "invoiced" && (
-                                    <span style={{ color: "#155724", marginLeft: 3 }}>✓</span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span style={{ color: "#c9cccf" }}>-</span>
-                          )}
                         </td>
 
                         {/* Status */}

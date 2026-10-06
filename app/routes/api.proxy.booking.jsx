@@ -162,7 +162,7 @@ export const action = async ({ request }) => {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { apartmentId, startDate, endDate, nights, bookingType, bookingDates, guests, quantity } = body;
+  const { apartmentId, startDate, endDate, nights, bookingType, bookingDates, guests, quantity, guestName, guestEmail } = body;
 
   if (!apartmentId || !startDate) {
     return Response.json({ error: "apartmentId and startDate are required" }, { status: 400 });
@@ -243,6 +243,8 @@ export const action = async ({ request }) => {
       totalPrice:    finalTotal,
       depositAmount: depositCharged,
       status:        "pending",
+      customerName:  guestName || undefined,
+      customerEmail: guestEmail || undefined,
       lineItemProperties: {
         bookingType,
         quantity: parsedQuantity,
@@ -266,23 +268,12 @@ export const action = async ({ request }) => {
     "X-Shopify-Access-Token": sess?.accessToken,
   };
 
-  // Main booking variant → full total
-  await updateVariantPrice(session.shop, productGid, finalTotal);
+  // Main booking variant -> deposit if exists, otherwise full total
+  const chargeAmount = depositCharged !== null ? depositCharged : finalTotal;
+  await updateVariantPrice(session.shop, productGid, chargeAmount);
 
-  // Deposit variant → deposit amount (charged as separate cart item)
   let depositVariantGid = null;
   let depositVariantId  = null;
-  if (depositCharged && sess?.accessToken) {
-    try {
-      depositVariantGid = await getOrCreateDepositVariant(session.shop, endpoint, headers);
-      if (depositVariantGid) {
-        await updateVariantPriceByGid(depositVariantGid, depositCharged, endpoint, headers);
-        depositVariantId = depositVariantGid.split("/").pop();
-      }
-    } catch (err) {
-      console.error("[Rentfic] deposit variant error:", err);
-    }
-  }
 
   return Response.json({
     success:          true,

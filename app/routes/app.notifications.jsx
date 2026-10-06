@@ -22,14 +22,14 @@ const TABS = [
 ];
 
 const TAB_META = {
-  bookingConfirmation:   { recipient: "Guest",  hasTiming: false },
-  bookingReminder:       { recipient: "Guest",  hasTiming: true,  timingLabel: "Days before check-in" },
-  checkinDay:            { recipient: "Guest",  hasTiming: false },
-  checkoutReminder:      { recipient: "Guest",  hasTiming: false },
-  bookingCancelled:      { recipient: "Guest",  hasTiming: false },
+  bookingConfirmation:   { recipient: "Customer",  hasTiming: false },
+  bookingReminder:       { recipient: "Customer",  hasTiming: true,  timingLabel: "Days before check-in" },
+  checkinDay:            { recipient: "Customer",  hasTiming: false },
+  checkoutReminder:      { recipient: "Customer",  hasTiming: false },
+  bookingCancelled:      { recipient: "Customer",  hasTiming: false },
   ownerBookingCancelled: { recipient: "Owner",  hasTiming: false },
   ownerNewBooking:       { recipient: "Owner",  hasTiming: false },
-  reviewRequest:         { recipient: "Guest",  hasTiming: true,  timingLabel: "Days after check-out" },
+  reviewRequest:         { recipient: "Customer",  hasTiming: true,  timingLabel: "Days after check-out" },
 };
 
 const PARAMS = [
@@ -112,7 +112,7 @@ export default function NotificationsPage() {
       TABS.map(({ key }) => [key, { ...DEFAULT_TEMPLATES[key], ...(savedTpls[key] ?? {}) }])
     );
 
-  const [mainTab,        setMainTab]        = useState("Guest");
+  const [mainTab,        setMainTab]        = useState("Customer");
   const [activeTab,      setActiveTab]      = useState(TABS[0].key);
   const [templates,      setTemplates]      = useState(buildTemplates);
   const [emailProvider,  setEmailProvider]  = useState(config?.emailProvider  ?? "default");
@@ -247,7 +247,7 @@ export default function NotificationsPage() {
 
           {/* ── Main Tab Switcher (Admin vs Guest) ── */}
           <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-            {["Guest", "Owner"].map((role) => (
+            {["Customer", "Owner"].map((role) => (
               <button
                 key={role}
                 onClick={() => {
@@ -268,7 +268,7 @@ export default function NotificationsPage() {
                   transition: "all 0.2s",
                 }}
               >
-                {role === "Owner" ? "Admin Notifications" : "Guest Notifications"}
+                {role === "Owner" ? "Admin Notifications" : "Customer Notifications"}
               </button>
             ))}
           </div>

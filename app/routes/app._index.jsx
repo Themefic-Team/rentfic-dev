@@ -273,7 +273,7 @@ export default function DashboardPage() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
-                  {["Order", "Guest", "Rental", "Start Date", "End Date", "Total", "Status"].map((h) => (
+                  {["Order", "Customer", "Rental", "Start Date", "End Date", "Total", "Status"].map((h) => (
                     <th key={h} style={thStyle}>{h}</th>
                   ))}
                 </tr>

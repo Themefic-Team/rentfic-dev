@@ -8,8 +8,8 @@ import {
 } from "react-router";
 import { redirect } from "react-router";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
-import { Popover, DatePicker, TextField, Icon } from "@shopify/polaris";
-import { CalendarIcon, CalendarTimeIcon, CalendarCheckIcon, HomeIcon, WrenchIcon, DeliveryIcon, PackageIcon, CheckIcon } from "@shopify/polaris-icons";
+import { Popover, DatePicker, TextField, Icon, DropZone, Thumbnail, LegacyStack, Text } from "@shopify/polaris";
+import { CalendarIcon, CalendarTimeIcon, CalendarCheckIcon, HomeIcon, WrenchIcon, DeliveryIcon, PackageIcon, CheckIcon, ExportIcon, ImageIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getPlanLimits } from "../plans.server";
@@ -815,7 +815,8 @@ function ApartmentEditForm() {
                 textDecoration: "none", whiteSpace: "nowrap",
               }}
             >
-              🗓️ Export iCal
+              <span style={{ width: 16, height: 16 }}><Icon source={ExportIcon} /></span>
+              Export iCal
             </a>
           </div>
         )}
@@ -963,11 +964,11 @@ function ApartmentEditForm() {
             </div>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(250px, 1fr))", gap:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:16, alignItems:"start" }}>
             <Field label="Listing Name *" hint="The name shown to customers on the booking calendar.">
               <Inp type="text" value={name} onChange={mark(setName)} placeholder={listingType === 'property' ? 'e.g. Ocean View Suite' : listingType === 'equipment' ? 'e.g. Canon R5 Camera' : listingType === 'vehicle' ? 'e.g. Red Tesla Model 3' : 'e.g. Beach Chairs'} />
             </Field>
-            <Field label="Status">
+            <Field label="Status" hint="Control visibility of this rental.">
               <Sel value={status} onChange={mark(setStatus)}>
                 <option value="active">Active</option>
                 <option value="draft">Draft</option>
@@ -980,18 +981,21 @@ function ApartmentEditForm() {
                 rows={3} style={{ ...inputStyle, resize:"vertical" }} />
             </Field>
             {/* Guest fields - only shown for property & experience */}
-            {(LISTING_TYPES.find(l => l.key === listingType)?.showGuestFields) && (<>
-              <Field label="Maximum Adults ⓘ">
+          </div>
+          
+          {(LISTING_TYPES.find(l => l.key === listingType)?.showGuestFields) && (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16, marginTop:16 }}>
+              <Field label="Maximum Adults" hint="Limit number of adults">
                 <Inp type="number" min={0} value={maxAdults} onChange={mark(setMaxAdults)} placeholder="e.g. 5" />
               </Field>
-              <Field label="Maximum Children ⓘ">
+              <Field label="Maximum Children" hint="Limit number of children">
                 <Inp type="number" min={0} value={maxChildren} onChange={mark(setMaxChildren)} placeholder="e.g. 5" />
               </Field>
-              <Field label="Maximum Infants ⓘ">
+              <Field label="Maximum Infants" hint="Limit number of infants">
                 <Inp type="number" min={0} value={maxInfants} onChange={mark(setMaxInfants)} placeholder="e.g. 5" />
               </Field>
-            </>)}
-          </div>
+            </div>
+          )}
         </s-section>
 
         {/* ══════════════ BLOCK DATES ══════════════ */}
@@ -1540,51 +1544,21 @@ function ApartmentEditForm() {
             Upload photos of this rental. They will be displayed in the storefront booking widget.
           </p>
 
-          {/* Upload input */}
           <div style={{ marginBottom: 16 }}>
-            <label
-              htmlFor="apt-photo-upload"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                padding: "9px 18px", background: "#fff", border: "1px solid #c9cccf",
-                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#202223",
-              }}
-            >
-              📷 Choose Photos
-            </label>
-            <input
-              id="apt-photo-upload"
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: "none" }}
-              onChange={async (e) => {
-                const files = Array.from(e.target.files || []);
-                if (!files.length) return;
-
-                // Convert each file to a base64 data-URL for instant preview,
-                // then upload to Shopify Files API via the action
-                const previews = await Promise.all(
-                  files.map(
-                    (f) =>
-                      new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.readAsDataURL(f);
-                      })
-                  )
-                );
-
-                // Show previews immediately
-                setImages((prev) => [...prev, ...previews]);
-                setIsDirty(true);
-                // Reset input so same file can be re-selected
-                e.target.value = "";
-              }}
-            />
-            <span style={{ fontSize: 12, color: "#6d7175", marginLeft: 12 }}>
-              PNG, JPG, WEBP - up to 20 MB each
-            </span>
+            <DropZone accept="image/*" type="image" onDrop={async (files) => {
+              if (!files.length) return;
+              const previews = await Promise.all(
+                files.map((f) => new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(reader.result);
+                  reader.readAsDataURL(f);
+                }))
+              );
+              setImages((prev) => [...prev, ...previews]);
+              setIsDirty(true);
+            }}>
+              <DropZone.FileUpload actionTitle="Add photos" actionHint="Accepts .gif, .jpg, and .png" />
+            </DropZone>
           </div>
 
           {/* Photo grid */}

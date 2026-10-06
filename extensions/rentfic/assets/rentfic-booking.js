@@ -337,9 +337,11 @@
       this.viewYear  = null;
       this.viewMonth = null;
 
-      this.guests   = { adults: 1, children: 0, infants: 0 };
-      this.quantity = 1;
-      this.calOpen  = true;
+      this.guests     = { adults: 1, children: 0, infants: 0 };
+      this.quantity   = 1;
+      this.calOpen    = true;
+      this.guestName  = '';
+      this.guestEmail = '';
 
       this._init();
     }
@@ -711,6 +713,7 @@
           ${this._renderGuestSelector()}
           ${this._renderQuantitySelector()}
           ${hasSel ? this._renderSummary(nights, total, deposit) : ''}
+          ${hasSel ? this._renderGuestInfoForm() : ''}
           ${hasSel ? `<button class="rentfic-reserve-btn" id="rf-reserve">${this.buttonText}</button>` : ''}
           <div id="rf-msg" class="rentfic-msg" style="display:none"></div>
         </div>
@@ -722,7 +725,7 @@
       if (this._hasSelection()) {
         const total   = this._calcTotal();
         const deposit = this._calcDeposit(total);
-        this._syncPagePrice(deposit !== null ? deposit : total);
+        this._syncPagePrice(total);
       } else {
         this._syncPagePrice(this.apartment.pricePerNight || 0);
       }
@@ -952,6 +955,16 @@
             `;
           }).join('')}
           ${maxGuests ? `<div class="rf-guest-max-hint">${this.t.maxGuestsHint(totalG, maxGuests)}</div>` : ''}
+        </div>
+      `;
+    }
+
+    _renderGuestInfoForm() {
+      return `
+        <div class="rf-guest-info-form" style="margin-top: 15px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
+          <div class="rf-section-title" style="margin-bottom: 5px; font-size: 14px; font-weight: 600;">Customer Information</div>
+          <input type="text" id="rf-guest-name" value="${this.guestName || ''}" placeholder="Full Name (Required)" style="width: 100%; padding: 10px; border: 1px solid #c9cccf; border-radius: 4px; font-size: 14px;" />
+          <input type="email" id="rf-guest-email" value="${this.guestEmail || ''}" placeholder="Email Address (Required)" style="width: 100%; padding: 10px; border: 1px solid #c9cccf; border-radius: 4px; font-size: 14px;" />
         </div>
       `;
     }
@@ -1186,6 +1199,12 @@
       // Reserve button
       const btn = this.container.querySelector('#rf-reserve');
       if (btn) btn.addEventListener('click', () => this._reserve());
+
+      // Guest info inputs
+      const gn = this.container.querySelector('#rf-guest-name');
+      if (gn) gn.addEventListener('input', e => this.guestName = e.target.value);
+      const ge = this.container.querySelector('#rf-guest-email');
+      if (ge) ge.addEventListener('input', e => this.guestEmail = e.target.value);
     }
 
     // ─── Reserve ─────────────────────────────────────────────────────────────
@@ -1210,6 +1229,13 @@
           return;
         }
       }
+
+      if (!this.guestName || !this.guestName.trim() || !this.guestEmail || !this.guestEmail.trim()) {
+        this._msg('Please provide your name and email address.', 'warning');
+        if (btn) { btn.disabled = false; btn.textContent = this.buttonText; }
+        return;
+      }
+
       const total  = this._calcTotal();
       let startDate, endDate, bookingDates;
 
@@ -1235,6 +1261,8 @@
             startDate, endDate, nights, bookingType, bookingDates,
             guests:    this.guests,
             quantity:  this.quantity,
+            guestName: this.guestName.trim(),
+            guestEmail: this.guestEmail.trim(),
           }),
         });
         const bData = await bRes.json();
@@ -1275,10 +1303,11 @@
         }
         if (bookingDates) properties['Dates'] = bookingDates.join(', ');
         if (bData.isDeposit) {
-          properties['Deposit'] = this._fmtPrice(bData.depositCharged);
+          properties['Amount Paid Now (Deposit)'] = this._fmtPrice(bData.depositCharged);
+          properties['Balance Due'] = this._fmtPrice(bData.finalTotal - bData.depositCharged);
         }
 
-        // 2. Add main booking to cart (variant price = full total)
+        // 2. Add main booking to cart (variant price was set by API to either deposit or full total)
         const cartRes = await fetch('/cart/add.js', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1288,23 +1317,6 @@
         if (!cartRes.ok) {
           this._msg('Booking saved but cart update failed. Please refresh.', 'warning');
           return;
-        }
-
-        // 2b. Add deposit as a separate cart item so it's charged at checkout
-        if (bData.isDeposit && bData.depositVariantId) {
-          await fetch('/cart/add.js', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: bData.depositVariantId,
-              quantity: 1,
-              properties: {
-                'Booking Reference': bData.bookingId,
-                'Note': 'Refundable security deposit',
-                '_booking_id': bData.bookingId,
-              },
-            }),
-          }).catch(() => {});
         }
 
         // 3. Reset both variant prices (fire-and-forget)

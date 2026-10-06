@@ -12,7 +12,7 @@ export const loader = async ({ request }) => {
   });
 
   if (format === "csv") {
-    const headers = ["ID","Order","Guest","Email","Apartment","Check-in","Check-out","Nights","Total","Deposit","Status","Created"];
+    const headers = ["ID","Order","Customer","Email","Apartment","Check-in","Check-out","Nights","Total","Deposit","Status","Created"];
     const rows = bookings.map(b => [
       b.id, b.orderNumber ?? "", b.customerName ?? "", b.customerEmail ?? "",
       b.productTitle, b.startDate, b.endDate ?? "", b.nights ?? "",

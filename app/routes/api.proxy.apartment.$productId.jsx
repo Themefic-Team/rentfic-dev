@@ -82,6 +82,8 @@ export const loader = async ({ request, params }) => {
       depositEnabled: s.depositEnabled ?? false,
       depositType: s.depositType ?? "percent",
       depositAmount: s.depositAmount ?? null,
+      // photos
+      images: s.images ?? [],
     },
     shopSettings: {
       timezone: ss.timezone ?? "UTC",

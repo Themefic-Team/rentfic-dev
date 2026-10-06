@@ -42,7 +42,7 @@ export const DEFAULT_TEMPLATES = {
   ownerNewBooking: {
     enabled: true,
     subject: "New booking – {{product.name}} by {{customer.firstName}} {{customer.lastName}}",
-    body: "A new booking has been received.\n\nProduct: {{product.name}}\nOrder:   {{order.name}}\nGuest:   {{customer.firstName}} {{customer.lastName}}\nStart:   {{start}}\nEnd:     {{end}}",
+    body: "A new booking has been received.\n\nProduct: {{product.name}}\nOrder:   {{order.name}}\nCustomer:   {{customer.firstName}} {{customer.lastName}}\nStart:   {{start}}\nEnd:     {{end}}",
     timing: null,
     groupMails: false,
     whenToRemind: "disabled",
@@ -58,7 +58,7 @@ export const DEFAULT_TEMPLATES = {
   ownerBookingCancelled: {
     enabled: true,
     subject: "Booking Cancelled - {{product.name}}",
-    body: "A booking has been cancelled.\n\nProperty: {{product.name}}\nGuest:    {{customer.firstName}} {{customer.lastName}}\nDates:    {{start}} – {{end}}\nOrder:    {{order.name}}",
+    body: "A booking has been cancelled.\n\nProperty: {{product.name}}\nCustomer:    {{customer.firstName}} {{customer.lastName}}\nDates:    {{start}} – {{end}}\nOrder:    {{order.name}}",
     timing: null,
     groupMails: false,
     whenToRemind: "disabled",

@@ -260,7 +260,7 @@ export default function BookingCalendar() {
                             <button
                               key={b.id}
                               onClick={() => navigate(`/app/booking/${b.id}`)}
-                              title={`${b.customerName || "Guest"} - ${b.productTitle}`}
+                              title={`${b.customerName || "Customer"} - ${b.productTitle}`}
                               style={{
                                 display: "block", width: "100%", textAlign: "left",
                                 padding: "2px 5px", borderRadius: 4,
@@ -293,9 +293,9 @@ export default function BookingCalendar() {
 
           {/* Apartment legend */}
           <div style={{ background: "#fff", border: "1px solid #e1e3e5", borderRadius: 10, padding: "14px 16px" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#202223", marginBottom: 10 }}>Apartments</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#202223", marginBottom: 10 }}>Rentals</div>
             {apartments.length === 0 ? (
-              <div style={{ fontSize: 12, color: "#6d7175" }}>No apartments yet.</div>
+              <div style={{ fontSize: 12, color: "#6d7175" }}>No rentals yet.</div>
             ) : (
               apartments.map((apt, i) => {
                 const color = PALETTE[i % PALETTE.length];

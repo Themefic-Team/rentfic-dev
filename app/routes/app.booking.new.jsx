@@ -263,10 +263,10 @@ export default function NewBookingPage() {
               )}
             </s-section>
 
-            {/* Guest info */}
-            <s-section heading="Guest Information">
+            {/* Customer info */}
+            <s-section heading="Customer Information">
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <Field label="Guest Name">
+                <Field label="Customer Name">
                   <input
                     type="text"
                     name="customerName"
@@ -276,7 +276,7 @@ export default function NewBookingPage() {
                     style={inputStyle}
                   />
                 </Field>
-                <Field label="Guest Email">
+                <Field label="Customer Email">
                   <input
                     type="email"
                     name="customerEmail"
@@ -295,7 +295,7 @@ export default function NewBookingPage() {
                 name="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Internal notes about this booking (not visible to the guest)…"
+                placeholder="Internal notes about this booking (not visible to the customer)…"
                 rows={3}
                 style={{ ...inputStyle, resize: "vertical" }}
               />
